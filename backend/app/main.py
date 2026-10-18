@@ -176,6 +176,17 @@ def health():
         with psycopg.connect(DB,connect_timeout=3) as c:c.execute("SELECT 1")
         return {"status":"ok","database":"connected"}
     except Exception:return JSONResponse(status_code=503,content={"status":"error","database":"unavailable"})
+
+@app.get("/public/catalog")
+def public_catalog():
+    """Public storefront catalog; never returns internal notes, costs, or exact stock."""
+    with psycopg.connect(DB) as c:
+        rows=c.execute("""SELECT name,unit,sale_price,quantity>0
+            FROM inventory_products
+            WHERE is_active=TRUE AND item_type='finished_product' AND sale_price IS NOT NULL
+            ORDER BY name,id""").fetchall()
+    return {"items":[{"name":r[0],"unit":r[1],"sale_price":r[2],"available":r[3]} for r in rows]}
+
 @app.post("/auth/login")
 def login(response:Response,username:str=Form(...),password:str=Form(...)):
     with psycopg.connect(DB) as c:u=c.execute("SELECT id,username,password_hash,is_active,role,session_version FROM app_users WHERE username=%s",(username.strip(),)).fetchone()

@@ -29,6 +29,9 @@ Mantener y desarrollar Gatelier, una aplicación de gestión para un atelier tex
 - El usuario ha descrito la carpeta del servidor como `~/gatelier`, pero confirmar en el entorno real.
 
 ## Identidad y navegación
+- La portada pública de clientes se sirve en `/`; el panel interno existente se sirve bajo `/admin/`.
+- No exponer costes, notas internas ni cantidades exactas de inventario en el catálogo público.
+- Las consultas de compra se hacen por WhatsApp; no afirmar que se registra o reserva una venta si no hay una transacción de venta implementada.
 - Menú lateral uniforme en las páginas principales, orden acordado:
   1. Inventario
   2. Ventas

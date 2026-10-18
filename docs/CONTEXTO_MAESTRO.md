@@ -34,6 +34,12 @@ Gatelier es una aplicación privada de gestión de un atelier textil consciente.
 - Coste promedio ponderado para entradas valorizadas.
 - No stock negativo; todo ajuste debe ser movimiento trazable.
 
+## Separación público / administración
+- La portada pública para clientes se sirve en `/`; el panel interno existente se sirve bajo `/admin/`.
+- La API pública del catálogo solo expone productos terminados, nombre, unidad, precio de venta y una señal booleana de disponibilidad; no expone coste, notas internas ni cantidad exacta.
+- Las consultas de compra se hacen por WhatsApp. Esta modalidad no registra ventas ni reserva existencias.
+- El número comercial se configura en `frontend/store-config.js` y es información pública.
+
 ## Historial de archivos/paquetes disponibles en esta conversación
 Se incluyen en `history/updates/` los ZIP disponibles, sin secretos:
 - `gatelier_login_inventario_mvp.zip`
