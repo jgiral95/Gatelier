@@ -1,32 +1,41 @@
 # Gatelier
 
-Aplicación de gestión para un atelier textil consciente. Este repositorio reúne el último código disponible en el kit compartido y conserva los paquetes históricos en [`versiones/`](versiones/README.md).
+Aplicación de gestión para un atelier textil consciente. Este repositorio reúne el código fuente y la configuración incluidos en `gatelier.zip`, junto con los paquetes históricos y el contexto conservados en [`versiones/`](versiones/README.md).
 
-## Estado de este repositorio
+## Origen y alcance
 
-Este código se preparó a partir del snapshot `latest_known_update` del kit, porque no se proporcionó el checkout real del servidor. No se ha verificado contra la aplicación desplegada ni contra una base de datos real. Debe tratarse como una base de trabajo reconstruida desde los artefactos disponibles, no como una copia certificada de producción.
+El backend y las páginas del ZIP coinciden con el snapshot histórico de administración de usuarios. El ZIP añade `compose.yaml`, Nginx, dependencias fijadas y el script para crear usuarios. Esto forma una base de proyecto coherente con los artefactos recibidos, pero no confirma qué versión está desplegada en el servidor ni cuál es el esquema activo de su PostgreSQL.
 
-El starter histórico contiene un esquema PostgreSQL distinto (UUID y tablas `products`/`users`) del que espera la versión actual del backend (`BIGSERIAL` y tablas `inventory_products`/`app_users`). Por ese motivo, su migración `001_initial_schema.sql` no se instala aquí. El backend actual contiene DDL aditivo en el inicio de la aplicación; antes de usarlo con datos existentes hay que compararlo con el esquema real y preparar migraciones compatibles.
+El archivo `gatelier_db.sql` del ZIP contiene filas de tablas de usuarios, inventario y movimientos. Se excluyó del repositorio para no versionar datos ni hashes de contraseñas. No lo uses para inicializar o restaurar una base productiva. Los archivos `.bak` también se excluyeron.
 
 ## Estructura
 
 - `backend/app/main.py`: API FastAPI, autenticación, inventario, movimientos y producción.
-- `backend/app/promote_admin.py`: utilidad para promover una cuenta existente a administrador.
-- `backend/requirements.txt` y `backend/Dockerfile`: dependencias y empaquetado del API.
-- `frontend/`: páginas HTML, JavaScript y el logo original.
-- `versiones/`: paquetes históricos, snapshot de origen y contexto del proyecto.
-- `.env.example`: nombres de variables requeridas; no contiene secretos reales.
+- `backend/app/create_user.py`: creación interactiva de una cuenta.
+- `backend/app/promote_admin.py`: promoción de una cuenta existente a administrador.
+- `backend/requirements.txt` y `backend/Dockerfile`: dependencias fijadas y empaquetado del API.
+- `frontend/`: páginas HTML, JavaScript y logo original.
+- `compose.yaml` y `nginx.conf`: servicios locales y proxy de `/api/` al backend.
+- `versiones/`: paquetes históricos, snapshot de referencia y documentación de contexto.
+- `.env.example`: plantilla sin credenciales reales.
 
-## Configuración local
+## Ejecución local
 
-1. Crea un entorno virtual dentro de `backend/` e instala `backend/requirements.txt`.
-2. Prepara PostgreSQL y configura `DATABASE_URL` y `SESSION_SECRET` usando `.env.example` como referencia. No guardes secretos reales en Git.
-3. Ejecuta el API desde `backend/` con `uvicorn app.main:app --reload`.
+Para un entorno local separado:
 
-Las páginas frontend llaman al API mediante rutas `/api/...`; el kit no contiene la configuración Nginx ni el Compose real del servidor. Para probar las páginas localmente hace falta un servidor estático con proxy `/api/` hacia FastAPI. No se ha reconstruido ni validado la configuración de producción.
+1. Copia `.env.example` a `.env` y reemplaza los valores de ejemplo. Usa una contraseña URL-safe para PostgreSQL, porque Compose la inserta en `DATABASE_URL`.
+2. Ejecuta `docker compose config -q` para revisar la configuración.
+3. Ejecuta `docker compose up -d --build`.
+4. Abre `http://localhost:8085` (o el puerto definido en `APP_PORT`).
 
-El backend crea o amplía tablas al iniciar. No lo conectes a una base con datos existentes hasta revisar el esquema y las migraciones. El script `promote_admin.py` presupone que `app_users` ya existe.
+El Compose no publica PostgreSQL ni la API en puertos del host; publica el frontend. El backend aplica DDL al arrancar. Antes de conectar esta configuración a una base existente, compara el esquema y prepara una migración compatible; no borres ni recrees el volumen para forzar la inicialización.
+
+Para crear una cuenta dentro del contenedor API usa `docker compose exec api python -m app.create_user NOMBRE_USUARIO`. Para promover una cuenta existente usa `docker compose exec api python -m app.promote_admin NOMBRE_USUARIO`.
+
+## Estado de producción
+
+Este repositorio se armó con ZIPs porque el checkout del servidor no estaba disponible durante la preparación. Antes de desplegar, contrasta `compose.yaml`, `.env`, volúmenes, Nginx y esquema PostgreSQL con el servidor real; respalda los archivos afectados y los datos. No se modificó ni verificó ningún contenedor o servicio del servidor.
 
 ## Versiones
 
-Añade los nuevos paquetes sin reemplazar los anteriores en `versiones/paquetes/` y registra su procedencia y estado de despliegue en [`versiones/README.md`](versiones/README.md). Un ZIP preparado no demuestra que se haya instalado en el servidor.
+Añade nuevos paquetes sin reemplazar los anteriores en `versiones/paquetes/` y registra su procedencia y estado en [`versiones/README.md`](versiones/README.md). No archives dumps de datos ni secretos.

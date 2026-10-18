@@ -1,6 +1,10 @@
 .env
 .env.*
 !.env.example
+data/
+backups/
+gatelier_db.sql
+*.bak
 __pycache__/
 *.py[cod]
 .venv/
