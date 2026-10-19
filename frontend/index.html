@@ -4,159 +4,408 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#344a42">
-  <meta name="description" content="Piezas textiles artesanales de Gatelier. Explora la colección y consulta tu compra por WhatsApp.">
+  <meta name="description" content="Forros textiles hechos a mano en Gatelier con telas recuperadas. Cinco tallas, del libro de bolsillo al de gran formato. Consulta y compra por WhatsApp.">
   <title>Gatelier — Atelier textil consciente</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=Work+Sans:wght@400;500;600&display=swap">
   <style>
-    :root{--mint:#BBE0D7;--deep:#769f94;--ink:#28332f;--muted:#78817c;--paper:#f8f7f2;--white:#fffefa;--line:#e6e6de;--forest:#344a42;--rose:#b56d62;--serif:Georgia,"Times New Roman",serif}
-    *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--paper);color:var(--ink);font:15px Inter,system-ui,-apple-system,"Segoe UI",sans-serif}a{color:inherit}button{font:inherit}.wrap{width:min(1160px,calc(100% - 44px));margin:auto}
-    .topbar{background:var(--forest);color:#fff;padding:19px 0}.toprow{display:flex;align-items:center;justify-content:space-between;gap:24px}.brand{display:flex;flex-direction:column;align-items:center;gap:5px;text-decoration:none}.brand-logo{display:block;width:174px;height:auto;object-fit:contain}.brand-sub{width:100%;text-align:center;font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--mint)}.toplinks{display:flex;align-items:center;gap:25px;font-size:12px}.toplinks a{text-decoration:none;color:#f4f7f5}.toplinks a:hover{text-decoration:underline;text-underline-offset:5px}.team-link{border:1px solid #ffffff70;padding:10px 14px;border-radius:999px}
-    .hero{padding:64px 0 60px;overflow:hidden}.hero-grid{display:grid;grid-template-columns:1.1fr .9fr;align-items:center;gap:60px}.eyebrow{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:#64756d;font-weight:700}.hero h1{font:400 clamp(46px,7vw,84px)/.98 var(--serif);letter-spacing:-.055em;max-width:640px;margin:18px 0 23px}.hero h1 em{font-weight:400;color:#698c80}.hero-copy{max-width:495px;color:#68736d;line-height:1.8;margin:0 0 29px}.cta{display:inline-flex;align-items:center;justify-content:center;gap:10px;border:0;border-radius:999px;background:var(--forest);color:white;text-decoration:none;padding:14px 21px;font-weight:650;font-size:13px;transition:transform .18s,background .18s}.cta:hover{background:#263a33;transform:translateY(-1px)}.cta.secondary{background:transparent;color:var(--forest);border:1px solid #bfc9c2}.cta.disabled{background:#aab3ae;cursor:not-allowed;pointer-events:none}.hero-note{font-size:11px;color:var(--muted);margin-top:13px}.hero-art{min-height:350px;position:relative;border-radius:47% 47% 8px 8px;background:linear-gradient(145deg,#c6e2d8,#a8c8bd 53%,#769f94);overflow:hidden;display:grid;place-items:center}.hero-art:before,.hero-art:after{content:"";position:absolute;border:1px solid #fff9;border-radius:50%;width:360px;height:360px}.hero-art:before{width:285px;height:285px}.fabric-shape{width:220px;height:190px;background:repeating-linear-gradient(135deg,#f7f3e9 0 22px,#d7a99a 22px 27px,#f7f3e9 27px 49px,#6f9184 49px 54px);border-radius:46% 18% 38% 12%;box-shadow:0 20px 28px #344a4230;transform:rotate(-12deg);z-index:1}.art-caption{position:absolute;right:22px;bottom:19px;font:italic 16px var(--serif);color:#405b51}
-    .collection{padding:57px 0 75px;background:var(--white);border-top:1px solid var(--line)}.section-head{display:flex;align-items:end;justify-content:space-between;gap:20px;margin-bottom:26px}.section-head h2,.story h2{font:400 clamp(32px,4vw,47px)/1.05 var(--serif);letter-spacing:-.04em;margin:8px 0 0}.section-head p{max-width:365px;color:var(--muted);font-size:13px;line-height:1.65;margin:0}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}.card{border:1px solid var(--line);background:#fffefa;border-radius:5px;overflow:hidden;display:flex;flex-direction:column;min-width:0}.card-art{height:175px;background:linear-gradient(140deg,#e8eee8,#d3e4dc);display:grid;place-items:center;position:relative;overflow:hidden}.card-art:before{content:"";width:180px;height:120px;border-radius:28% 18% 35% 20%;background:repeating-linear-gradient(0deg,#b56d62 0 17px,#d9b6a8 17px 21px,#f0e9dc 21px 39px);box-shadow:0 13px 25px #28332f22;transform:rotate(-8deg)}.card:nth-child(3n+2) .card-art{background:linear-gradient(140deg,#f0e7dc,#dfd1bd)}.card:nth-child(3n+2) .card-art:before{background:repeating-linear-gradient(90deg,#739184 0 18px,#b8c8bc 18px 22px,#e3c8a6 22px 42px);transform:rotate(6deg)}.card:nth-child(3n) .card-art{background:linear-gradient(140deg,#eee4e0,#dbc4bd)}.card:nth-child(3n) .card-art:before{background:repeating-linear-gradient(135deg,#d5b295 0 16px,#f0e9dc 16px 20px,#9a6b60 20px 39px);transform:rotate(3deg)}.card-body{padding:18px;display:flex;flex-direction:column;flex:1}.availability{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#648276;font-weight:700}.availability.out{color:#92726a}.card h3{font:400 23px/1.12 var(--serif);margin:9px 0 17px}.card-foot{margin-top:auto;display:flex;align-items:center;justify-content:space-between;gap:10px}.price{font-size:14px;font-weight:700}.unit{display:block;color:var(--muted);font-size:10px;font-weight:400;margin-top:4px}.buy{display:inline-flex;align-items:center;justify-content:center;background:var(--mint);color:var(--ink);text-decoration:none;font-size:11px;font-weight:700;border-radius:999px;padding:11px 13px;white-space:nowrap}.buy:hover{background:#a8d1c4}.buy.disabled{background:#ecece5;color:#7c817d;pointer-events:none}.state{grid-column:1/-1;padding:42px 20px;text-align:center;border:1px dashed #ccd2ca;color:var(--muted);line-height:1.7}.story{padding:72px 0}.story-grid{display:grid;grid-template-columns:.75fr 1.25fr;gap:65px;align-items:start}.story p{margin:0;color:#68736d;line-height:1.9;max-width:640px}.story-mark{border-left:2px solid var(--deep);padding:8px 0 8px 24px;font:italic 23px/1.35 var(--serif);color:#53675e}.footer{background:var(--forest);color:#eaf0ec;padding:24px 0;font-size:11px}.footer-row{display:flex;justify-content:space-between;gap:20px;align-items:center}.footer a{color:inherit;text-underline-offset:3px}.hidden{display:none!important}
-    @media(max-width:800px){.hero{padding:48px 0}.hero-grid{grid-template-columns:1fr;gap:32px}.hero-art{min-height:270px}.hero h1{max-width:570px}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.story-grid{grid-template-columns:1fr;gap:22px}.toplinks{gap:15px}}
-    @media(max-width:560px){.wrap{width:min(100% - 30px,1160px)}.topbar{padding:14px 0}.brand-logo{width:143px}.toplinks a:not(.team-link){display:none}.team-link{padding:9px 11px;font-size:11px}.hero{padding:42px 0}.hero-grid{gap:25px}.hero-art{min-height:230px}.fabric-shape{transform:scale(.8) rotate(-7deg)}.section-head{display:block}.section-head p{margin-top:12px}.grid{grid-template-columns:1fr}.card-art{height:200px}.card-foot{align-items:end}.story{padding:52px 0}.footer-row{align-items:flex-start;flex-direction:column;gap:8px}}
-  </style>
-  <style>
+    /* Banda verde de marca arriba y abajo, papel claro en medio; la guía de tallas a escala es el momento central. */
+    :root{
+      --forest:#344a42;--forest-dark:#263a33;--mint:#BBE0D7;--mint-soft:#e3f1ec;--sage:#4f7a6c;
+      --leather:#9a5a33;--ink:#26302c;--text:#4f5a55;--muted:#5f6b65;--line:#dcdfd6;
+      --paper:#f6f5ef;--paper-2:#fbfaf6;--white:#ffffff;
+      --serif:Newsreader,Georgia,"Times New Roman",serif;--sans:"Work Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+    }
+    *{box-sizing:border-box}
+    html{scroll-behavior:smooth}
+    @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important}}
+    body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.6 var(--sans)}
+    img{max-width:100%}
+    a{color:var(--forest)}a:hover{color:var(--forest-dark)}
+    :focus-visible{outline:2px solid var(--leather);outline-offset:2px}
+    .wrap{max-width:1160px;margin:0 auto;padding-left:max(24px,env(safe-area-inset-left,0px));padding-right:max(24px,env(safe-area-inset-right,0px))}
+    .eyebrow{font-size:12px;letter-spacing:.16em;text-transform:uppercase;font-weight:600;color:var(--leather)}
+    .section{padding-block:80px}
+    .section-head{display:flex;flex-wrap:wrap;align-items:end;justify-content:space-between;gap:16px 40px;margin-bottom:36px}
+    .section-head p{margin:0;max-width:400px;color:var(--text);font-size:15px}
+    h1,h2,h3{text-wrap:balance}
+    .h2{margin:8px 0 0;font:400 48px/1.05 var(--serif);letter-spacing:-.02em}
+    .btn{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:0 24px;border-radius:999px;background:var(--forest);color:var(--white);text-decoration:none;font-weight:600;font-size:15px;border:1px solid var(--forest);transition:background .18s}
+    .btn:hover{background:var(--forest-dark);color:var(--white)}
+    .btn.ghost{background:transparent;color:var(--forest)}
+    .btn.ghost:hover{background:#344a4214;color:var(--forest)}
+    .btn.disabled{background:#aab3ae;border-color:#aab3ae;pointer-events:none}
 
-    .showcase{padding:57px 0 68px;background:var(--white);border-top:1px solid var(--line)}
-    .showcase-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:17px}
-    .showcase-card{border:1px solid var(--line);background:#fffefa;border-radius:5px;overflow:hidden;display:flex;flex-direction:column;min-width:0}
-    .showcase-photo{height:290px;display:grid;place-items:center;background:#f4f0e7;padding:15px}
-    .showcase-photo img{display:block;width:100%;height:100%;object-fit:contain}
-    .showcase-info{padding:15px;display:flex;align-items:center;justify-content:space-between;gap:9px}
-    .showcase-copy{display:grid;gap:5px}
-    .showcase-info h3{font:400 18px/1.15 var(--serif);margin:0}
-    .showcase-price{margin:0;color:#53675e;font-size:12px;font-weight:700}
-    .showcase-info .buy{font-size:10px;padding:10px 11px}
-    .hero-infographic{aspect-ratio:1.3;position:relative;overflow:visible}
-    .hero-product-photo{position:absolute;z-index:1;left:50%;top:0;width:auto;height:100%;max-width:64%;object-fit:contain;transform:translateX(-50%);border-radius:3px}
-    .hero-leaders{position:absolute;inset:0;width:100%;height:100%;z-index:2;pointer-events:none}
-    .hero-leaders path{fill:none;stroke:#344a42;stroke-width:1.35;vector-effect:non-scaling-stroke}
-    .hero-leaders circle{fill:#BBE0D7;stroke:#344a42;stroke-width:1.5;vector-effect:non-scaling-stroke}
-    .hero-callout{position:absolute;z-index:3;max-width:120px;padding:4px 6px;border-radius:3px;background:#f8f7f2e8;color:#344a42;font-size:10px;font-weight:650;line-height:1.25;box-shadow:0 2px 8px #28332f12}
-    .hero-callout-flap{right:1%;top:5%;max-width:108px;text-align:right}
-    .hero-callout-body{right:1%;top:49%;max-width:105px}
-    .hero-callout-loop{left:1%;top:11%;max-width:110px}
-    .hero-callout-patch{right:1%;top:83%;max-width:112px}
-    .catalog{padding-top:62px}
-    .catalog .card-art{display:none}
-    .story-copy{display:flex;align-items:flex-start;gap:22px}
-    .story-photo{display:block;width:min(38%,220px);height:300px;object-fit:cover;object-position:center;border-radius:4px;flex:none}
-    .story-copy-text{min-width:0}
-    @media(max-width:800px){.showcase-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.showcase-photo{height:260px}}
-    @media(max-width:560px){.showcase{padding:45px 0}.showcase-grid{gap:11px}.showcase-photo{height:225px;padding:9px}.showcase-info{padding:11px;align-items:flex-start;flex-direction:column}.showcase-info .buy{width:100%;white-space:normal;text-align:center}.story-copy{flex-direction:column}.story-photo{width:min(100%,250px);height:auto;max-height:340px;object-fit:contain}.catalog{padding-top:45px}}
+    /* Encabezado */
+    .topbar{background:var(--forest);color:#f3f6f4}
+    .toprow{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:16px 32px;padding-block:18px}
+    .brand{display:flex;flex-direction:column;align-items:center;gap:4px;text-decoration:none}
+    .brand img{display:block;width:150px;height:auto}
+    .brand span{font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--mint)}
+    .nav{display:flex;flex-wrap:wrap;align-items:center;gap:8px 26px;font-size:14px}
+    .nav a{color:#f3f6f4;text-decoration:none}.nav a:hover{text-decoration:underline;text-underline-offset:5px;color:#fff}
+    .nav .ig{color:var(--mint);font-weight:600}
+
+    /* Hero */
+    .hero{display:flex;flex-wrap:wrap;align-items:center;gap:48px 64px;padding-block:72px 64px}
+    .hero-copy{flex:1 1 420px;min-width:0;display:flex;flex-direction:column;gap:22px}
+    .hero h1{margin:0;font:400 76px/.98 var(--serif);letter-spacing:-.035em}
+    .hero h1 em{color:var(--sage)}
+    .hero-lead{margin:0;max-width:470px;font-size:18px;color:var(--text)}
+    .hero-actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:6px}
+    .hero-note{margin:0;font-size:14px;color:var(--muted)}
+    .hero-figure{flex:1 1 420px;min-width:0;margin:0;position:relative}
+    .hero-figure img{display:block;width:100%;height:440px;object-fit:cover;border-radius:220px 220px 6px 6px}
+    .hero-figure figcaption{position:absolute;left:20px;bottom:20px;background:var(--paper);padding:8px 14px;border-radius:4px;font:italic 16px var(--serif);color:var(--forest)}
+
+    /* Tres razones */
+    .reasons{border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--paper-2)}
+    .reasons .wrap{display:flex;flex-wrap:wrap;gap:28px 56px;padding-block:36px}
+    .reasons .wrap>div{flex:1 1 260px;min-width:0}
+    .reasons h2{margin:0 0 6px;font:500 22px var(--serif)}
+    .reasons p{margin:0;color:var(--text);font-size:15px}
+
+    /* Guía de tallas */
+    .guide{display:flex;flex-wrap:wrap;gap:40px 56px;align-items:flex-start}
+    .scale-card{flex:0 1 420px;min-width:0;background:var(--paper-2);border:1px solid var(--line);border-radius:6px;padding:28px 24px 20px}
+    .scale{position:relative;width:319px;max-width:100%;height:396px;margin:0 auto;background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:55px 55px;background-position:left bottom;border-left:1px solid #8a948f;border-bottom:1px solid #8a948f}
+    .scale-box{position:absolute;left:0;bottom:0;border:1px solid #6f7d77;border-left:0;border-bottom:0;background:transparent;transition:background .2s,border-color .2s}
+    .scale-box span{position:absolute;right:6px;top:4px;font-size:12px;font-weight:600;color:var(--muted)}
+    .scale-box.on{border:2px solid var(--forest);border-left:0;border-bottom:0;background:#BBE0D7cc;z-index:6}
+    .scale-box.on span{color:var(--ink)}
+    .scale-axis{display:flex;justify-content:space-between;width:319px;max-width:100%;margin:6px auto 0;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+    .detail{flex:1 1 420px;min-width:0;display:flex;flex-direction:column;gap:24px}
+    .pills{display:flex;flex-wrap:wrap;gap:10px}
+    .pill{min-width:64px;min-height:48px;padding:0 18px;border-radius:999px;font:inherit;font-size:16px;font-weight:600;cursor:pointer;border:1px solid var(--forest);background:transparent;color:var(--forest)}
+    .pill[aria-pressed="true"]{background:var(--forest);color:var(--white)}
+    .size-line{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 20px}
+    .size-dims{font:44px/1 var(--serif);font-variant-numeric:tabular-nums}
+    .size-price{font-size:18px;font-weight:600;color:var(--leather)}
+    .fits h3{margin:0 0 10px;font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:600}
+    .fits ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px}
+    .fits li{display:flex;gap:12px;align-items:baseline;font-size:17px}
+    .fits li::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--sage);flex:none;transform:translateY(-2px)}
+    .measure{border-top:1px solid var(--line);padding-top:24px;display:flex;flex-direction:column;gap:14px}
+    .measure h3{margin:0;font:500 24px var(--serif)}
+    .fields{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end}
+    .field{display:flex;flex-direction:column;gap:6px}
+    .field label{font-size:14px;color:var(--text)}
+    .field input{width:120px;min-height:46px;padding:0 12px;border:1px solid #8a948f;border-radius:6px;background:var(--white);font:inherit;font-size:17px;color:var(--ink)}
+    .verdict{margin:0;font-size:17px;font-weight:500;color:var(--forest)}
+    .small{margin:0;font-size:13px;color:var(--muted)}
+
+    /* Colección */
+    .collection{background:var(--white);border-top:1px solid var(--line)}
+    .cards{display:flex;flex-wrap:wrap;gap:20px}
+    .card{flex:1 1 200px;min-width:0;display:flex;flex-direction:column;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--paper-2)}
+    .card-photo{height:260px;background:#f1efe6;padding:14px;display:flex;align-items:center;justify-content:center}
+    .card-photo img{display:block;width:100%;height:100%;object-fit:contain}
+    .card-body{padding:16px;display:flex;flex-direction:column;gap:6px;flex:1}
+    .card h3{margin:0;font:500 21px/1.15 var(--serif)}
+    .card-dims{font-size:14px;color:var(--muted);font-variant-numeric:tabular-nums}
+    .card-foot{margin-top:auto;padding-top:12px;display:flex;flex-direction:column;gap:10px}
+    .card-price{font-size:17px;font-weight:600;font-variant-numeric:tabular-nums}
+    .card .btn{min-height:44px;font-size:14px;padding:0 16px}
+    .stock{margin-top:40px;border-top:1px solid var(--line);padding-top:28px}
+    .stock h3{margin:0 0 6px;font:500 24px var(--serif)}
+    .stock-list{margin:16px 0 0;padding:0;list-style:none;display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr));gap:12px}
+    .stock-item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border:1px solid var(--line);border-radius:6px;background:var(--paper-2)}
+    .stock-item strong{display:block;font-weight:600}
+    .stock-item small{color:var(--muted)}
+    .stock-item .tag{font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:var(--sage);white-space:nowrap}
+    .stock-item .tag.out{color:#8a6a62}
+
+    /* La tela */
+    .fabric{background:var(--forest);color:#eef3f0}
+    .fabric .wrap{display:flex;flex-wrap:wrap;gap:48px 64px;align-items:center}
+    .fabric img{flex:0 1 340px;min-width:0;width:340px;height:460px;object-fit:cover;border-radius:6px}
+    .fabric-copy{flex:1 1 420px;min-width:0;display:flex;flex-direction:column;gap:28px}
+    .fabric .eyebrow{color:var(--mint)}
+    .fabric .h2{color:var(--white)}
+    .steps{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:18px}
+    .steps li{display:flex;gap:18px;align-items:baseline}
+    .steps .n{font:28px var(--serif);color:var(--mint);width:28px;flex:none}
+    .steps strong{color:var(--white);font-weight:600}
+
+    /* Atelier y gatos */
+    .atelier{display:flex;flex-wrap:wrap;gap:48px 64px;align-items:center}
+    .atelier-copy{flex:1 1 420px;min-width:0;display:flex;flex-direction:column;gap:20px}
+    .atelier-copy .h2{margin:0}
+    .atelier-copy p{margin:0;max-width:520px;font-size:17px;color:var(--text)}
+    .atelier blockquote{margin:8px 0 0;padding-left:20px;border-left:2px solid var(--leather);font:italic 24px/1.35 var(--serif);color:var(--forest)}
+    .atelier>img{flex:0 1 380px;min-width:0;width:380px;height:500px;object-fit:cover;border-radius:190px 190px 6px 6px}
+    .cats{padding-bottom:80px;display:flex;flex-direction:column;gap:28px}
+    .cats .section-head{margin:0}
+    .cats h2{margin:0;font:400 36px/1.1 var(--serif);letter-spacing:-.02em}
+    .cat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,240px),1fr));gap:20px}
+    .cat{margin:0;display:flex;flex-direction:column;gap:10px;min-width:0}
+    .cat img{display:block;width:100%;height:260px;object-fit:cover;border-radius:6px}
+    .cat figcaption{display:flex;flex-direction:column;gap:2px}
+    .cat strong{font:500 22px var(--serif)}
+    .cat span{font-size:14px;color:var(--muted)}
+    .cat.feature{grid-column:span 2}
+    @media (max-width:600px){.cat.feature{grid-column:auto}}
+
+    /* Cómo comprar */
+    .buy{background:var(--mint-soft);border-top:1px solid #c9ddd5}
+    .buy .wrap{display:flex;flex-direction:column;gap:32px;padding-block:72px}
+    .buy h2{margin:0;font:400 44px/1.05 var(--serif);letter-spacing:-.02em}
+    .buy ol{margin:0;padding:0;list-style:none;display:flex;flex-wrap:wrap;gap:24px 40px}
+    .buy li{flex:1 1 240px;min-width:0;display:flex;flex-direction:column;gap:6px}
+    .buy .n{font:32px/1 var(--serif);color:var(--leather)}
+    .buy li strong{font-weight:600;font-size:17px}
+    .buy li span:last-child{color:var(--text);font-size:15px}
+    .contact{display:flex;flex-wrap:wrap;gap:12px 28px;align-items:center;font-size:15px;font-variant-numeric:tabular-nums}
+
+    /* Pie */
+    .footer{background:var(--forest);color:#dfe8e3}
+    .footer .wrap{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:16px 24px;padding-block:28px;font-size:13px}
+    .footer-brand{display:flex;align-items:center;gap:16px}
+    .footer-brand img{display:block;width:96px;height:auto}
+    .footer-links{display:flex;flex-wrap:wrap;gap:8px 22px}
+    .footer a{color:#dfe8e3}.footer a.team{color:#aebcb5}
+
+    @media (max-width:800px){.hero h1{font-size:60px}.h2{font-size:40px}.hero-figure img{height:380px}}
+    @media (max-width:560px){
+      .section{padding-block:56px}.hero{padding-block:44px}
+      .hero h1{font-size:46px}.h2{font-size:34px}.buy h2{font-size:34px}
+      .hero-figure img{height:320px;border-radius:160px 160px 6px 6px}
+      .nav a:not(.ig){display:none}
+      .fabric img,.atelier>img{width:100%;height:340px}
+      .size-dims{font-size:36px}
+    }
   </style>
 </head>
 <body>
   <header class="topbar">
     <div class="wrap toprow">
       <a class="brand" href="/" aria-label="Gatelier, inicio">
-        <img class="brand-logo" src="/assets/gatelier-logo-white.png" alt="Gatelier">
-        <span class="brand-sub">Atelier textil consciente</span>
+        <img src="/assets/gatelier-logo-white.png" alt="Gatelier">
+        <span>Atelier textil consciente</span>
       </a>
-      <nav class="toplinks" aria-label="Navegación principal">
+      <nav class="nav" aria-label="Navegación principal">
+        <a href="#tallas">Tallas</a>
         <a href="#coleccion">Colección</a>
+        <a href="#tela">La tela</a>
         <a href="#atelier">El atelier</a>
-        <a class="team-link" href="/admin/">Acceso equipo</a>
+        <a class="ig" href="https://www.instagram.com/gatelier_/" target="_blank" rel="noopener noreferrer">@gatelier_</a>
       </nav>
     </div>
   </header>
 
   <main>
-    <section class="hero">
-      <div class="wrap hero-grid">
-        <div>
-          <div class="eyebrow">Diseño textil hecho con intención</div>
-          <h1>Piezas para usar, <em>cuidar y conservar.</em></h1>
-          <p class="hero-copy">Explora la colección de Gatelier: piezas creadas artesanalmente con una mirada consciente sobre los materiales y su historia.</p>
-          <a class="cta" href="#coleccion">Descubrir la colección <span aria-hidden="true">↓</span></a>
-          <div class="hero-note">Compra y consultas directamente con el atelier por WhatsApp.</div>
+    <section class="wrap hero">
+      <div class="hero-copy">
+        <span class="eyebrow">Forros textiles hechos a mano</span>
+        <h1>Un refugio suave para <em>tus libros.</em></h1>
+        <p class="hero-lead">Forros cosidos en el atelier con telas que ya existían. Cinco tallas, del libro de bolsillo al de gran formato, y cada combinación de colores es única.</p>
+        <div class="hero-actions">
+          <a class="btn" href="#tallas">Encuentra tu talla</a>
+          <a class="btn ghost" href="#coleccion">Ver la colección</a>
         </div>
-        <div class="hero-infographic" role="img" aria-label="Bolsita azul y crudo con anotaciones sobre sus detalles visibles">
-          <img class="hero-product-photo" src="/assets/products/blue-cream-hero-photo.webp" alt="" fetchpriority="high">
-          <svg class="hero-leaders" viewBox="0 0 520 400" preserveAspectRatio="none" aria-hidden="true">
-            <path d="M410 45 H380 L299 95"/><circle cx="299" cy="95" r="5"/>
-            <path d="M420 213 H390 L241 257"/><circle cx="241" cy="257" r="5"/>
-            <path d="M108 58 H145 L178 43"/><circle cx="178" cy="43" r="5"/>
-            <path d="M410 342 H380 L274 318"/><circle cx="274" cy="318" r="5"/>
-          </svg>
-          <span class="hero-callout hero-callout-flap">Solapa azul</span>
-          <span class="hero-callout hero-callout-body">Cuerpo crudo</span>
-          <span class="hero-callout hero-callout-loop">Presilla lateral</span>
-          <span class="hero-callout hero-callout-patch">Parche Gatelier</span>
+        <p class="hero-note">Desde $70.000 · Pedidos por WhatsApp</p>
+      </div>
+      <figure class="hero-figure">
+        <img src="/assets/products/sage-blue-pair.webp" alt="Dos forros Gatelier: uno verde salvia con solapa cruda y otro crudo con solapa azul, ambos con parche de cuero" fetchpriority="high">
+        <figcaption>Tallas XS y S, telas recuperadas</figcaption>
+      </figure>
+    </section>
+
+    <section class="reasons" aria-label="Lo que hace distinto a Gatelier">
+      <div class="wrap">
+        <div><h2>Telas recuperadas</h2><p>Retazos y telas que tuvieron otra vida. Las clasificamos, lavamos y preparamos antes de cortar.</p></div>
+        <div><h2>Cosido a mano</h2><p>Cada forro sale de nuestra mesa de trabajo, con solapa, presilla y el parche de cuero Gatelier.</p></div>
+        <div><h2>Piezas únicas</h2><p>Como la tela cambia de lote en lote, ninguna combinación se repite exactamente igual.</p></div>
+      </div>
+    </section>
+
+    <section class="wrap section" id="tallas">
+      <div class="section-head">
+        <div><span class="eyebrow">Guía de tallas</span><h2 class="h2">¿Qué quieres proteger?</h2></div>
+        <p>Medidas del forro en centímetros, ancho por alto. El dibujo está a escala para que compares las cinco tallas.</p>
+      </div>
+      <div class="guide">
+        <div class="scale-card">
+          <div class="scale" id="scale" role="img" aria-label="Comparación a escala de las cinco tallas de forro, de XS a XL"></div>
+          <div class="scale-axis" aria-hidden="true"><span>0</span><span>5</span><span>10</span><span>15</span><span>20</span><span>25 cm</span></div>
+        </div>
+        <div class="detail">
+          <div class="pills" id="pills" role="group" aria-label="Elige una talla"></div>
+          <div class="size-line"><span class="size-dims" id="size-dims"></span><span class="size-price" id="size-price"></span></div>
+          <div class="fits"><h3>Le cabe, por ejemplo</h3><ul id="size-fits"></ul></div>
+          <a class="btn" id="size-wa" href="#" target="_blank" rel="noopener noreferrer" style="align-self:flex-start">Consultar por WhatsApp</a>
+          <form class="measure" id="measure" novalidate>
+            <h3>¿Ya mediste tu libro?</h3>
+            <div class="fields">
+              <div class="field"><label for="libro-ancho">Ancho (cm)</label><input id="libro-ancho" type="number" inputmode="decimal" min="1" step="0.5" value="15"></div>
+              <div class="field"><label for="libro-alto">Alto (cm)</label><input id="libro-alto" type="number" inputmode="decimal" min="1" step="0.5" value="23"></div>
+            </div>
+            <p class="verdict" id="verdict" aria-live="polite"></p>
+            <p class="small">Calculamos con un margen de 1,5 cm para que el libro entre y salga sin forzarlo. Si es muy grueso, envíanos sus medidas.</p>
+          </form>
         </div>
       </div>
     </section>
 
-    <section class="showcase" id="coleccion">
-      <div class="wrap">
+    <section class="collection" id="coleccion">
+      <div class="wrap section">
         <div class="section-head">
-          <div><div class="eyebrow">Hecho a mano en Gatelier</div><h2>Nuestros forros</h2></div>
-          <p>Explora los tamaños disponibles. Consulta por WhatsApp para confirmar la disponibilidad de cada pieza.</p>
+          <div><span class="eyebrow">Hecho a mano en Gatelier</span><h2 class="h2">La colección</h2></div>
+          <p>Cada pieza es única. Cuando una combinación se vende, el siguiente lote trae telas distintas. Confirma la disponibilidad por WhatsApp.</p>
         </div>
-        <div id="showcase" class="showcase-grid" aria-label="Galería de piezas de Gatelier"></div>
-      </div>
-    </section>
-    <section class="collection catalog" id="catalogo">
-      <div class="wrap">
-        <div class="section-head">
-          <div><div class="eyebrow">Catálogo del atelier</div><h2>Precios y disponibilidad</h2></div>
-          <p>Referencias registradas en el atelier. Confirma por WhatsApp antes de coordinar tu compra.</p>
+        <div class="cards" id="cards"></div>
+        <div class="stock" id="stock" hidden>
+          <h3>Disponibilidad en el atelier</h3>
+          <p class="small">Referencias registradas en el inventario. Confirma por WhatsApp antes de coordinar tu compra.</p>
+          <ul class="stock-list" id="stock-list"></ul>
         </div>
-        <div id="products" class="grid" aria-live="polite"><div class="state">Cargando la colección…</div></div>
       </div>
     </section>
 
-    <section class="story" id="atelier">
-      <div class="wrap story-grid">
-        <div><div class="eyebrow">Atelier textil consciente</div><h2>Una forma más atenta de crear.</h2></div>
-        <div class="story-copy"><img class="story-photo" src="/assets/products/atelier-colores.webp" alt="Forros textiles en varios colores junto a las etiquetas Gatelier, con el gato del atelier en la mesa de trabajo" loading="lazy" decoding="async"><div class="story-copy-text"><p>En Gatelier valoramos los materiales, el trabajo artesanal y las piezas pensadas para acompañarte por mucho tiempo. Cada creación nace en el atelier y se ofrece en cantidades cuidadas.</p><div class="story-mark">Vestir también puede ser una manera de cuidar lo que ya existe.</div></div></div>
+    <section class="fabric" id="tela">
+      <div class="wrap section">
+        <img src="/assets/products/atelier-fabrics.webp" alt="Telas recuperadas en tonos ocre, azul y verde junto a una tarjeta menta de Gatelier" loading="lazy" decoding="async">
+        <div class="fabric-copy">
+          <div><span class="eyebrow">De dónde viene la tela</span><h2 class="h2">Cada forro empieza con algo que ya existía.</h2></div>
+          <ol class="steps">
+            <li><span class="n">1</span><span><strong>Recuperamos.</strong> Retazos, sobrantes y telas en buen estado que iban a quedar sin uso.</span></li>
+            <li><span class="n">2</span><span><strong>Clasificamos y lavamos.</strong> Separamos por textura y color, y preparamos cada tela para coser.</span></li>
+            <li><span class="n">3</span><span><strong>Combinamos y cosemos.</strong> Elegimos el cuerpo y la solapa, y cosemos a mano en el atelier.</span></li>
+            <li><span class="n">4</span><span><strong>Firmamos.</strong> El parche de cuero Gatelier cierra cada pieza.</span></li>
+          </ol>
+        </div>
+      </div>
+    </section>
+
+    <section class="wrap section atelier" id="atelier">
+      <div class="atelier-copy">
+        <span class="eyebrow">El atelier</span>
+        <h2 class="h2">Siete gatos y un atelier.</h2>
+        <p>Gatelier junta gato y atelier, y en el taller viven siete. Supervisan cada lote desde la mesa de trabajo y siempre encuentran la tela más suave para acurrucarse. Eso mismo buscamos para tus libros: un lugar cómodo donde guardarlos y llevarlos contigo.</p>
+        <blockquote>Cuidar lo que lees también es cuidar lo que ya existe.</blockquote>
+      </div>
+      <img src="/assets/products/atelier-colores.webp" alt="Uno de los gatos del atelier olfatea forros de varios colores y etiquetas Gatelier sobre la mesa de trabajo" loading="lazy" decoding="async">
+    </section>
+
+    <section class="wrap cats" aria-labelledby="supervisores">
+      <div class="section-head">
+        <h2 id="supervisores">Los supervisores de cada lote</h2>
+        <p>Pascual, Lyra, Galileo, Bellota, Orion, Copito y Panchito revisan que cada tela sea lo bastante suave.</p>
+      </div>
+      <div class="cat-grid">
+        <figure class="cat feature"><img src="/assets/cats/orion.webp" alt="Orion, gato blanco con manchas naranjas, olfatea un forro Gatelier de solapa verde sobre la mesa" style="object-position:center 45%" loading="lazy" decoding="async"><figcaption><strong>Orion</strong><span>Control de calidad: ningún forro sale sin su aprobación.</span></figcaption></figure>
+        <figure class="cat"><img src="/assets/cats/panchito.webp" alt="Panchito, gato naranja atigrado, acurrucado sobre telas dobladas en un estante" loading="lazy" decoding="async"><figcaption><strong>Panchito</strong><span>Ya eligió su estante de telas.</span></figcaption></figure>
+        <figure class="cat"><img src="/assets/cats/pascual.webp" alt="Pascual, gato blanco y negro con collar rojo, asomado sobre el respaldo de una silla" style="object-position:center 30%" loading="lazy" decoding="async"><figcaption><strong>Pascual</strong><span>Vigila el taller desde la silla.</span></figcaption></figure>
+        <figure class="cat"><img src="/assets/cats/copito.webp" alt="Copito, gato blanco, dormido sobre cojines de tela verde azulada" loading="lazy" decoding="async"><figcaption><strong>Copito</strong><span>Prueba la suavidad de cada cojín.</span></figcaption></figure>
+        <figure class="cat"><img src="/assets/cats/galileo.webp" alt="Galileo, gato naranja, sentado en una repisa de madera mirando hacia abajo" style="object-position:center 25%" loading="lazy" decoding="async"><figcaption><strong>Galileo</strong><span>Supervisa desde lo más alto.</span></figcaption></figure>
+        <figure class="cat"><img src="/assets/cats/lyra.webp" alt="Lyra, gata tricolor con collar morado, sentada en un sofá gris" style="object-position:center 30%" loading="lazy" decoding="async"><figcaption><strong>Lyra</strong><span>No se le escapa ningún detalle.</span></figcaption></figure>
+        <figure class="cat"><img src="/assets/cats/bellota.webp" alt="Bellota, gata de pelo largo atigrada con pecho blanco, iluminada por el sol" style="object-position:center 30%" loading="lazy" decoding="async"><figcaption><strong>Bellota</strong><span>Sigue la luz por todo el taller.</span></figcaption></figure>
+      </div>
+    </section>
+
+    <section class="buy" aria-labelledby="comprar">
+      <div class="wrap">
+        <h2 id="comprar">Cómo comprar</h2>
+        <ol>
+          <li><span class="n">1</span><strong>Elige tu talla y tu pieza</strong><span>Usa la guía de tallas y mira lo disponible en la colección.</span></li>
+          <li><span class="n">2</span><strong>Escríbenos por WhatsApp</strong><span>Te confirmamos disponibilidad y te mostramos más fotos si quieres.</span></li>
+          <li><span class="n">3</span><strong>Coordinamos pago y entrega</strong><span>Acordamos contigo la forma de pago y cómo te llega el forro.</span></li>
+        </ol>
+        <div class="contact">
+          <a class="btn" id="wa-general" href="#" target="_blank" rel="noopener noreferrer">Escribir al atelier</a>
+          <span><span id="wa-display"></span>Instagram <a href="https://www.instagram.com/gatelier_/" target="_blank" rel="noopener noreferrer"><strong>@gatelier_</strong></a></span>
+        </div>
       </div>
     </section>
   </main>
 
-  <footer class="footer"><div class="wrap footer-row"><span>© <span id="year"></span> Gatelier · Atelier textil consciente</span><a href="/admin/">Acceso del equipo</a></div></footer>
+  <footer class="footer">
+    <div class="wrap">
+      <div class="footer-brand"><img src="/assets/gatelier-logo-white.png" alt="Gatelier"><span>© <span id="year"></span> · Atelier textil consciente</span></div>
+      <div class="footer-links">
+        <a href="https://www.instagram.com/gatelier_/" target="_blank" rel="noopener noreferrer">Instagram</a>
+        <a id="wa-footer" href="#" target="_blank" rel="noopener noreferrer">WhatsApp</a>
+        <a class="team" href="/admin/">Acceso del equipo</a>
+      </div>
+    </div>
+  </footer>
+
   <script src="/store-config.js"></script>
   <script>
-    const productsEl=document.getElementById('products');
-    const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-    const money=value=>new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',maximumFractionDigits:0}).format(Number(value||0));
+    const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const money=v=>new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',maximumFractionDigits:0}).format(Number(v||0));
     const waNumber=String(window.GATELIER_WHATSAPP_NUMBER||'').replace(/\D/g,'');
-    const showcaseItems=[
-      {label:'Tamaño XS · Azul y crudo',price:70000,image:'blue-cream.webp',alt:'Forro textil tamaño XS en tonos azul y crudo'},
-      {label:'Tamaño S · Salvia',price:75000,image:'salvia-s-real.webp',alt:'Forro textil tamaño S en verde salvia y crudo'},
-      {label:'Tamaño M',price:80000,image:'m.webp',alt:'Pieza textil tamaño M, en tonos ocre y azul petróleo'},
-      {label:'Tamaño L',price:85000,image:'l.webp',alt:'Pieza textil tamaño L, en tonos terracota y crudo'},
-      {label:'Tamaño XL',price:90000,image:'xl.webp',alt:'Pieza textil tamaño XL, en tonos rosa y oliva'}
+    const waLink=msg=>waNumber?`https://wa.me/${waNumber}?text=${encodeURIComponent(msg)}`:'';
+    function setWa(el,msg){const link=waLink(msg);if(link){el.href=link;el.classList.remove('disabled');el.removeAttribute('aria-disabled');}else{el.removeAttribute('href');el.classList.add('disabled');el.setAttribute('aria-disabled','true');}}
+
+    // Medidas confirmadas del forro (ancho × alto, cm). Precios y fotos de referencia de la galería.
+    const SIZES=[
+      {code:'XS',w:16,h:23,price:70000,color:'Azul y crudo',image:'blue-cream.webp',alt:'Forro talla XS con cuerpo crudo y solapa azul',fits:['Libro de bolsillo','Lector electrónico','Agenda o libreta pequeña']},
+      {code:'S',w:19,h:26,price:75000,color:'Salvia',image:'salvia-s-real.webp',alt:'Forro talla S verde salvia con solapa cruda',fits:['Novela en formato estándar','Cuaderno A5','Tablet de 8 pulgadas']},
+      {code:'M',w:22,h:30,price:80000,color:'Ocre y petróleo',image:'m.webp',alt:'Forro talla M azul petróleo con solapa ocre',fits:['Libro de tapa dura','Cuaderno grande','Tablet de 10 a 11 pulgadas']},
+      {code:'L',w:24,h:32,price:85000,color:'Terracota y crudo',image:'l.webp',alt:'Forro talla L crudo con solapa terracota y botón',fits:['Libro ilustrado','Cuaderno tamaño carta','Tablet de 12 a 13 pulgadas']},
+      {code:'XL',w:29,h:36,price:90000,color:'Rosa y arena',image:'xl.webp',alt:'Forro talla XL rosa con solapa color arena',fits:['Libro de arte o de gran formato','Carpeta de dibujo pequeña','Portátil de 13 pulgadas']}
     ];
-    function renderShowcase(){
-      const container=document.getElementById('showcase');
-      container.innerHTML=showcaseItems.map((item,index)=>{
-        const message=`Hola, vi la pieza ${item.label} (${money(item.price)}) en la página de Gatelier. ¿Me confirman su disponibilidad?`;
-        const link=waNumber?`https://wa.me/${waNumber}?text=${encodeURIComponent(message)}`:'';
-        const button=waNumber?`<a class="buy" href="${link}" target="_blank" rel="noopener noreferrer">Consultar por WhatsApp ↗</a>`:`<span class="buy disabled" aria-disabled="true">WhatsApp pronto</span>`;
-        return `<article class="showcase-card"><div class="showcase-photo"><img src="/assets/products/${item.image}" alt="${esc(item.alt)}" loading="${index<4?'eager':'lazy'}" decoding="async"></div><div class="showcase-info"><div class="showcase-copy"><h3>${esc(item.label)}</h3><p class="showcase-price">${money(item.price)}</p></div>${button}</div></article>`;
-      }).join('');
+    const PX=11, MARGIN=1.5;
+    const sizeMsg=s=>`Hola, vi en la página de Gatelier el forro talla ${s.code} (${s.w} × ${s.h} cm, ${money(s.price)}). ¿Me confirman qué combinaciones tienen disponibles?`;
+
+    // Guía de tallas
+    const scale=document.getElementById('scale'), pills=document.getElementById('pills');
+    scale.innerHTML=SIZES.map((s,i)=>`<div class="scale-box" data-code="${s.code}" style="width:${s.w*PX}px;height:${s.h*PX}px;z-index:${5-i}"><span>${s.code}</span></div>`).join('');
+    pills.innerHTML=SIZES.map(s=>`<button class="pill" type="button" data-code="${s.code}" aria-pressed="false">${s.code}</button>`).join('');
+    function selectSize(code){
+      const s=SIZES.find(x=>x.code===code);if(!s)return;
+      scale.querySelectorAll('.scale-box').forEach(b=>b.classList.toggle('on',b.dataset.code===code));
+      pills.querySelectorAll('.pill').forEach(p=>p.setAttribute('aria-pressed',String(p.dataset.code===code)));
+      document.getElementById('size-dims').textContent=`${s.w} × ${s.h} cm`;
+      document.getElementById('size-price').textContent=money(s.price);
+      document.getElementById('size-fits').innerHTML=s.fits.map(f=>`<li>${esc(f)}</li>`).join('');
+      const btn=document.getElementById('size-wa');btn.textContent=`Consultar la talla ${s.code} por WhatsApp`;setWa(btn,sizeMsg(s));
     }
-    function productCard(item){
-      const available=Boolean(item.available);
-      const message=`Hola, me interesa ${item.name} (${money(item.sale_price)}). ¿Podrían confirmarme disponibilidad y opciones de entrega?`;
-      const link=waNumber?`https://wa.me/${waNumber}?text=${encodeURIComponent(message)}`:'';
-      const button=waNumber?`<a class="buy" href="${link}" target="_blank" rel="noopener noreferrer">Consultar por WhatsApp ↗</a>`:`<span class="buy disabled" aria-disabled="true" title="Contacto pendiente de configuración">WhatsApp pronto</span>`;
-      return `<article class="card"><div class="card-body"><span class="availability ${available?'':'out'}">${available?'Disponible':'Consulta disponibilidad'}</span><h3>${esc(item.name)}</h3><div class="card-foot"><span class="price">${money(item.sale_price)}<span class="unit">por ${esc(item.unit)}</span></span>${button}</div></div></article>`;
+    pills.addEventListener('click',e=>{const b=e.target.closest('.pill');if(b)selectSize(b.dataset.code);});
+
+    // Mide tu libro
+    const inW=document.getElementById('libro-ancho'), inH=document.getElementById('libro-alto'), verdict=document.getElementById('verdict');
+    function checkBook(){
+      const w=parseFloat(String(inW.value).replace(',','.')), h=parseFloat(String(inH.value).replace(',','.'));
+      if(!(w>0)||!(h>0)){verdict.textContent='Escribe el ancho y el alto de tu libro.';return;}
+      const match=SIZES.find(s=>w+MARGIN<=s.w&&h+MARGIN<=s.h);
+      if(match){verdict.textContent=`Te recomendamos la talla ${match.code} (${match.w} × ${match.h} cm).`;selectSize(match.code);}
+      else verdict.textContent='Tu libro es más grande que la talla XL. Escríbenos y buscamos una solución.';
     }
-    async function loadCatalog(){
-      productsEl.innerHTML='<div class="state">Cargando la colección…</div>';
+    inW.addEventListener('input',checkBook);inH.addEventListener('input',checkBook);
+    document.getElementById('measure').addEventListener('submit',e=>{e.preventDefault();checkBook();});
+
+    // Colección
+    document.getElementById('cards').innerHTML=SIZES.map((s,i)=>{
+      const link=waLink(sizeMsg(s));
+      const btn=link?`<a class="btn" href="${link}" target="_blank" rel="noopener noreferrer">Pedir por WhatsApp</a>`:`<span class="btn disabled" aria-disabled="true">WhatsApp pronto</span>`;
+      return `<article class="card"><div class="card-photo"><img src="/assets/products/${s.image}" alt="${esc(s.alt)}" loading="${i<3?'eager':'lazy'}" decoding="async"></div><div class="card-body"><h3>Talla ${s.code} · ${esc(s.color)}</h3><span class="card-dims">${s.w} × ${s.h} cm</span><div class="card-foot"><span class="card-price">${money(s.price)}</span>${btn}</div></div></article>`;
+    }).join('');
+
+    // Disponibilidad desde el inventario (solo se muestra si hay referencias públicas)
+    async function loadStock(){
       try{
-        const response=await fetch('/api/public/catalog',{headers:{Accept:'application/json'}});
-        if(!response.ok)throw new Error('No se pudo cargar la colección. Intenta de nuevo más tarde.');
-        const data=await response.json();
-        const items=data.items||[];
-        productsEl.innerHTML=items.length?items.map(productCard).join(''):'<div class="state">Estamos preparando la colección. Vuelve pronto para conocer nuestras piezas.</div>';
-      }catch(error){productsEl.innerHTML=`<div class="state">${esc(error.message||'No se pudo cargar la colección.')}</div>`;}
+        const r=await fetch('/api/public/catalog',{headers:{Accept:'application/json'}});
+        if(!r.ok)return;
+        const items=(await r.json()).items||[];
+        if(!items.length)return;
+        document.getElementById('stock-list').innerHTML=items.map(it=>{
+          const ok=Boolean(it.available);
+          return `<li class="stock-item"><div><strong>${esc(it.name)}</strong><small>${money(it.sale_price)} por ${esc(it.unit)}</small></div><span class="tag ${ok?'':'out'}">${ok?'Disponible':'Consultar'}</span></li>`;
+        }).join('');
+        document.getElementById('stock').hidden=false;
+      }catch(_){/* La galería sigue funcionando sin el inventario. */}
     }
+
+    // Contacto
+    const general='Hola, vengo de la página de Gatelier y quiero consultar por un forro.';
+    setWa(document.getElementById('wa-general'),general);setWa(document.getElementById('wa-footer'),general);
+    if(waNumber){const n=waNumber.replace(/^57(\d{3})(\d{3})(\d{4})$/,'+57 $1 $2 $3');document.getElementById('wa-display').textContent=`WhatsApp ${n.startsWith('+')?n:'+'+waNumber} · `;}
     document.getElementById('year').textContent=new Date().getFullYear();
-    renderShowcase();
-    loadCatalog();
+
+    selectSize('S');checkBook();loadStock();
   </script>
 </body>
 </html>

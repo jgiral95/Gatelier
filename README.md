@@ -25,6 +25,9 @@ El archivo `gatelier_db.sql` del ZIP contiene filas de tablas de usuarios, inven
 - `/admin/`: panel administrativo actual, con inventario, producción, movimientos y usuarios.
 - `/api/public/catalog`: lectura pública limitada a nombre, unidad, precio y disponibilidad. No expone costes, notas internas ni cantidades exactas de stock.
 - `frontend/assets/products/`: fotografías de la galería pública, con recorte limpio y formato WebP optimizado.
+- `frontend/assets/cats/`: fotos de los siete gatos del atelier para la sección «Los supervisores de cada lote».
+
+La portada incluye una guía de tallas a escala con las medidas del forro (ancho × alto): XS 16 × 23, S 19 × 26, M 22 × 30, L 24 × 32 y XL 29 × 36 cm, y un medidor que recomienda la talla con 1,5 cm de margen. Las medidas, precios y fotos de referencia viven en el arreglo `SIZES` de `frontend/index.html`. La lista de disponibilidad del inventario (`/api/public/catalog`) aparece debajo de la colección solo cuando hay referencias públicas.
 
 Los botones de las piezas abren WhatsApp para consultar tamaño, precio y disponibilidad; las referencias con precio del inventario también muestran su precio registrado. Configura el número comercial en `frontend/store-config.js` con el formato internacional solo en dígitos. Hasta configurarlo, el botón aparece desactivado. Esta modalidad no crea un pedido en Gatelier ni reserva existencias: disponibilidad y entrega se confirman por WhatsApp.
 
