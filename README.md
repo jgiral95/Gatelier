@@ -24,8 +24,9 @@ El archivo `gatelier_db.sql` del ZIP contiene filas de tablas de usuarios, inven
 - `/`: catálogo público de productos terminados activos con precio configurado.
 - `/admin/`: panel administrativo actual, con inventario, producción, movimientos y usuarios.
 - `/api/public/catalog`: lectura pública limitada a nombre, unidad, precio y disponibilidad. No expone costes, notas internas ni cantidades exactas de stock.
+- `frontend/assets/products/`: fotografías de la galería pública, con recorte limpio y formato WebP optimizado.
 
-El botón del catálogo abre una conversación de WhatsApp con el nombre y el precio del producto. Configura el número comercial en `frontend/store-config.js` con el formato internacional solo en dígitos. Hasta configurarlo, el botón aparece desactivado. Esta modalidad no crea un pedido en Gatelier ni reserva existencias: disponibilidad y entrega se confirman por WhatsApp.
+Los botones de las piezas abren WhatsApp para consultar tamaño, precio y disponibilidad; las referencias con precio del inventario también muestran su precio registrado. Configura el número comercial en `frontend/store-config.js` con el formato internacional solo en dígitos. Hasta configurarlo, el botón aparece desactivado. Esta modalidad no crea un pedido en Gatelier ni reserva existencias: disponibilidad y entrega se confirman por WhatsApp.
 
 ## Ejecución local
 

@@ -15,6 +15,20 @@
     @media(max-width:800px){.hero{padding:48px 0}.hero-grid{grid-template-columns:1fr;gap:32px}.hero-art{min-height:270px}.hero h1{max-width:570px}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.story-grid{grid-template-columns:1fr;gap:22px}.toplinks{gap:15px}}
     @media(max-width:560px){.wrap{width:min(100% - 30px,1160px)}.topbar{padding:14px 0}.brand-logo{width:143px}.toplinks a:not(.team-link){display:none}.team-link{padding:9px 11px;font-size:11px}.hero{padding:42px 0}.hero-grid{gap:25px}.hero-art{min-height:230px}.fabric-shape{transform:scale(.8) rotate(-7deg)}.section-head{display:block}.section-head p{margin-top:12px}.grid{grid-template-columns:1fr}.card-art{height:200px}.card-foot{align-items:end}.story{padding:52px 0}.footer-row{align-items:flex-start;flex-direction:column;gap:8px}}
   </style>
+  <style>
+    .showcase{padding:57px 0 68px;background:var(--white);border-top:1px solid var(--line)}
+    .showcase-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:17px}
+    .showcase-card{border:1px solid var(--line);background:#fffefa;border-radius:5px;overflow:hidden;display:flex;flex-direction:column;min-width:0}
+    .showcase-photo{height:290px;display:grid;place-items:center;background:#f4f0e7;padding:15px}
+    .showcase-photo img{display:block;width:100%;height:100%;object-fit:contain}
+    .showcase-info{padding:15px;display:flex;align-items:center;justify-content:space-between;gap:9px}
+    .showcase-info h3{font:400 18px/1.15 var(--serif);margin:0}
+    .showcase-info .buy{font-size:10px;padding:10px 11px}
+    .catalog{padding-top:62px}
+    .catalog .card-art{display:none}
+    @media(max-width:800px){.showcase-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.showcase-photo{height:260px}}
+    @media(max-width:560px){.showcase{padding:45px 0}.showcase-grid{gap:11px}.showcase-photo{height:225px;padding:9px}.showcase-info{padding:11px;align-items:flex-start;flex-direction:column}.showcase-info .buy{width:100%;white-space:normal;text-align:center}.catalog{padding-top:45px}}
+  </style>
 </head>
 <body>
   <header class="topbar">
@@ -45,11 +59,21 @@
       </div>
     </section>
 
-    <section class="collection" id="coleccion">
+    <section class="showcase" id="coleccion">
       <div class="wrap">
         <div class="section-head">
-          <div><div class="eyebrow">Selección Gatelier</div><h2>La colección</h2></div>
-          <p>¿Te interesa una pieza? Escríbenos para confirmar disponibilidad y coordinar tu compra.</p>
+          <div><div class="eyebrow">Hecho a mano en Gatelier</div><h2>Piezas textiles</h2></div>
+          <p>Explora algunos tamaños y combinaciones. Consulta por WhatsApp para confirmar el precio y la disponibilidad de cada pieza.</p>
+        </div>
+        <div id="showcase" class="showcase-grid" aria-label="Galería de piezas de Gatelier"></div>
+      </div>
+    </section>
+
+    <section class="collection catalog" id="catalogo">
+      <div class="wrap">
+        <div class="section-head">
+          <div><div class="eyebrow">Catálogo del atelier</div><h2>Precios y disponibilidad</h2></div>
+          <p>Referencias registradas en el atelier. Confirma por WhatsApp antes de coordinar tu compra.</p>
         </div>
         <div id="products" class="grid" aria-live="polite"><div class="state">Cargando la colección…</div></div>
       </div>
@@ -70,12 +94,30 @@
     const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     const money=value=>new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',maximumFractionDigits:0}).format(Number(value||0));
     const waNumber=String(window.GATELIER_WHATSAPP_NUMBER||'').replace(/\D/g,'');
+    const showcaseItems=[
+      {size:'S',image:'s.webp',alt:'Pieza textil tamaño S, en tonos terracota y crudo'},
+      {size:'M',image:'m.webp',alt:'Pieza textil tamaño M, en tonos ocre y azul petróleo'},
+      {size:'M',image:'m2.webp',alt:'Pieza textil tamaño M, en tonos crudo y beige tejido'},
+      {size:'L',image:'l.webp',alt:'Pieza textil tamaño L, en tonos terracota y crudo'},
+      {size:'XL',image:'xl.webp',alt:'Pieza textil tamaño XL, en tonos rosa y oliva'},
+      {size:'XL',image:'xl2.webp',alt:'Pieza textil tamaño XL, en tonos crudo y azul profundo'},
+      {size:'XS',image:'xs2.webp',alt:'Pieza textil tamaño XS, en tonos caramelo y tejido claro'}
+    ];
+    function renderShowcase(){
+      const container=document.getElementById('showcase');
+      container.innerHTML=showcaseItems.map((item,index)=>{
+        const message=`Hola, vi la pieza tamaño ${item.size} en la página de Gatelier. ¿Me confirman su precio y disponibilidad?`;
+        const link=waNumber?`https://wa.me/${waNumber}?text=${encodeURIComponent(message)}`:'';
+        const button=waNumber?`<a class="buy" href="${link}" target="_blank" rel="noopener noreferrer">Consultar por WhatsApp ↗</a>`:`<span class="buy disabled" aria-disabled="true">WhatsApp pronto</span>`;
+        return `<article class="showcase-card"><div class="showcase-photo"><img src="/assets/products/${item.image}" alt="${esc(item.alt)}" loading="${index<4?'eager':'lazy'}" decoding="async"></div><div class="showcase-info"><h3>Tamaño ${esc(item.size)}</h3>${button}</div></article>`;
+      }).join('');
+    }
     function productCard(item){
       const available=Boolean(item.available);
       const message=`Hola, me interesa ${item.name} (${money(item.sale_price)}). ¿Podrían confirmarme disponibilidad y opciones de entrega?`;
       const link=waNumber?`https://wa.me/${waNumber}?text=${encodeURIComponent(message)}`:'';
       const button=waNumber?`<a class="buy" href="${link}" target="_blank" rel="noopener noreferrer">Consultar por WhatsApp ↗</a>`:`<span class="buy disabled" aria-disabled="true" title="Contacto pendiente de configuración">WhatsApp pronto</span>`;
-      return `<article class="card"><div class="card-art" aria-hidden="true"></div><div class="card-body"><span class="availability ${available?'':'out'}">${available?'Disponible':'Consulta disponibilidad'}</span><h3>${esc(item.name)}</h3><div class="card-foot"><span class="price">${money(item.sale_price)}<span class="unit">por ${esc(item.unit)}</span></span>${button}</div></div></article>`;
+      return `<article class="card"><div class="card-body"><span class="availability ${available?'':'out'}">${available?'Disponible':'Consulta disponibilidad'}</span><h3>${esc(item.name)}</h3><div class="card-foot"><span class="price">${money(item.sale_price)}<span class="unit">por ${esc(item.unit)}</span></span>${button}</div></div></article>`;
     }
     async function loadCatalog(){
       productsEl.innerHTML='<div class="state">Cargando la colección…</div>';
@@ -88,6 +130,7 @@
       }catch(error){productsEl.innerHTML=`<div class="state">${esc(error.message||'No se pudo cargar la colección.')}</div>`;}
     }
     document.getElementById('year').textContent=new Date().getFullYear();
+    renderShowcase();
     loadCatalog();
   </script>
 </body>
