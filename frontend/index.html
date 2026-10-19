@@ -120,15 +120,11 @@
     const money=value=>new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',maximumFractionDigits:0}).format(Number(value||0));
     const waNumber=String(window.GATELIER_WHATSAPP_NUMBER||'').replace(/\D/g,'');
     const showcaseItems=[
-      {label:'Tamaño S',image:'s.webp',alt:'Pieza textil tamaño S, en tonos terracota y crudo'},
+      {label:'Tamaño S · Salvia',image:'sage-blue-pair.webp',alt:'Forro textil tamaño S en verde salvia y crudo'},
       {label:'Tamaño M',image:'m.webp',alt:'Pieza textil tamaño M, en tonos ocre y azul petróleo'},
-      {label:'Tamaño M',image:'m2.webp',alt:'Pieza textil tamaño M, en tonos crudo y beige tejido'},
       {label:'Tamaño L',image:'l.webp',alt:'Pieza textil tamaño L, en tonos terracota y crudo'},
       {label:'Tamaño XL',image:'xl.webp',alt:'Pieza textil tamaño XL, en tonos rosa y oliva'},
-      {label:'Tamaño XL',image:'xl2.webp',alt:'Pieza textil tamaño XL, en tonos crudo y azul profundo'},
-      {label:'Tamaño XS',image:'xs2.webp',alt:'Pieza textil tamaño XS, en tonos caramelo y tejido claro'},
-      {label:'Azul y crudo',image:'blue-cream.webp',alt:'Forro textil en tonos azul y crudo'},
-      {label:'Salvia y azul',image:'sage-blue-pair.webp',alt:'Dos forros textiles, uno salvia y otro azul'}
+      {label:'Tamaño XS · Azul y crudo',image:'blue-cream.webp',alt:'Forro textil tamaño XS en tonos azul y crudo'}
     ];
     function renderShowcase(){
       const container=document.getElementById('showcase');
