@@ -23,7 +23,9 @@
     .showcase-photo{height:290px;display:grid;place-items:center;background:#f4f0e7;padding:15px}
     .showcase-photo img{display:block;width:100%;height:100%;object-fit:contain}
     .showcase-info{padding:15px;display:flex;align-items:center;justify-content:space-between;gap:9px}
+    .showcase-copy{display:grid;gap:5px}
     .showcase-info h3{font:400 18px/1.15 var(--serif);margin:0}
+    .showcase-price{margin:0;color:#53675e;font-size:12px;font-weight:700}
     .showcase-info .buy{font-size:10px;padding:10px 11px}
     .hero-infographic{aspect-ratio:1.3;position:relative;overflow:visible}
     .hero-product-photo{position:absolute;z-index:1;left:50%;top:0;width:auto;height:100%;max-width:64%;object-fit:contain;transform:translateX(-50%);border-radius:3px}
@@ -89,7 +91,7 @@
       <div class="wrap">
         <div class="section-head">
           <div><div class="eyebrow">Hecho a mano en Gatelier</div><h2>Nuestros forros</h2></div>
-          <p>Explora algunos tamaños y combinaciones. Consulta por WhatsApp para confirmar el precio y la disponibilidad de cada pieza.</p>
+          <p>Explora los tamaños disponibles. Consulta por WhatsApp para confirmar la disponibilidad de cada pieza.</p>
         </div>
         <div id="showcase" class="showcase-grid" aria-label="Galería de piezas de Gatelier"></div>
       </div>
@@ -120,19 +122,19 @@
     const money=value=>new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',maximumFractionDigits:0}).format(Number(value||0));
     const waNumber=String(window.GATELIER_WHATSAPP_NUMBER||'').replace(/\D/g,'');
     const showcaseItems=[
-      {label:'Tamaño S · Salvia',image:'sage-blue-pair.webp',alt:'Forro textil tamaño S en verde salvia y crudo'},
-      {label:'Tamaño M',image:'m.webp',alt:'Pieza textil tamaño M, en tonos ocre y azul petróleo'},
-      {label:'Tamaño L',image:'l.webp',alt:'Pieza textil tamaño L, en tonos terracota y crudo'},
-      {label:'Tamaño XL',image:'xl.webp',alt:'Pieza textil tamaño XL, en tonos rosa y oliva'},
-      {label:'Tamaño XS · Azul y crudo',image:'blue-cream.webp',alt:'Forro textil tamaño XS en tonos azul y crudo'}
+      {label:'Tamaño XS · Azul y crudo',price:70000,image:'blue-cream.webp',alt:'Forro textil tamaño XS en tonos azul y crudo'},
+      {label:'Tamaño S · Salvia',price:75000,image:'salvia-s-real.webp',alt:'Forro textil tamaño S en verde salvia y crudo'},
+      {label:'Tamaño M',price:80000,image:'m.webp',alt:'Pieza textil tamaño M, en tonos ocre y azul petróleo'},
+      {label:'Tamaño L',price:85000,image:'l.webp',alt:'Pieza textil tamaño L, en tonos terracota y crudo'},
+      {label:'Tamaño XL',price:90000,image:'xl.webp',alt:'Pieza textil tamaño XL, en tonos rosa y oliva'}
     ];
     function renderShowcase(){
       const container=document.getElementById('showcase');
       container.innerHTML=showcaseItems.map((item,index)=>{
-        const message=`Hola, vi la pieza ${item.label} en la página de Gatelier. ¿Me confirman su precio y disponibilidad?`;
+        const message=`Hola, vi la pieza ${item.label} (${money(item.price)}) en la página de Gatelier. ¿Me confirman su disponibilidad?`;
         const link=waNumber?`https://wa.me/${waNumber}?text=${encodeURIComponent(message)}`:'';
         const button=waNumber?`<a class="buy" href="${link}" target="_blank" rel="noopener noreferrer">Consultar por WhatsApp ↗</a>`:`<span class="buy disabled" aria-disabled="true">WhatsApp pronto</span>`;
-        return `<article class="showcase-card"><div class="showcase-photo"><img src="/assets/products/${item.image}" alt="${esc(item.alt)}" loading="${index<4?'eager':'lazy'}" decoding="async"></div><div class="showcase-info"><h3>${esc(item.label)}</h3>${button}</div></article>`;
+        return `<article class="showcase-card"><div class="showcase-photo"><img src="/assets/products/${item.image}" alt="${esc(item.alt)}" loading="${index<4?'eager':'lazy'}" decoding="async"></div><div class="showcase-info"><div class="showcase-copy"><h3>${esc(item.label)}</h3><p class="showcase-price">${money(item.price)}</p></div>${button}</div></article>`;
       }).join('');
     }
     function productCard(item){
