@@ -24,10 +24,22 @@
     .showcase-info{padding:15px;display:flex;align-items:center;justify-content:space-between;gap:9px}
     .showcase-info h3{font:400 18px/1.15 var(--serif);margin:0}
     .showcase-info .buy{font-size:10px;padding:10px 11px}
+    .hero-collage{min-height:350px;position:relative;overflow:hidden;border-radius:47% 47% 8px 8px;background:linear-gradient(145deg,#c6e2d8,#a8c8bd 53%,#769f94);display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr));align-items:center;justify-items:center;gap:4px;padding:24px 30px 35px}
+    .hero-collage:before,.hero-collage:after{content:"";position:absolute;border:1px solid #fff9;border-radius:50%;width:300px;height:300px;pointer-events:none}
+    .hero-collage:before{width:230px;height:230px}
+    .collage-product{position:relative;z-index:1;width:100%;height:145px;object-fit:contain;filter:drop-shadow(0 9px 7px #344a4220)}
+    .collage-product:nth-of-type(1){transform:rotate(-7deg)}
+    .collage-product:nth-of-type(2){transform:rotate(5deg)}
+    .collage-product:nth-of-type(3){transform:rotate(5deg)}
+    .collage-product:nth-of-type(4){transform:rotate(-5deg)}
+    .collage-caption{position:absolute;right:17px;bottom:15px;z-index:2;font:italic 15px var(--serif);color:#405b51}
     .catalog{padding-top:62px}
     .catalog .card-art{display:none}
-    @media(max-width:800px){.showcase-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.showcase-photo{height:260px}}
-    @media(max-width:560px){.showcase{padding:45px 0}.showcase-grid{gap:11px}.showcase-photo{height:225px;padding:9px}.showcase-info{padding:11px;align-items:flex-start;flex-direction:column}.showcase-info .buy{width:100%;white-space:normal;text-align:center}.catalog{padding-top:45px}}
+    .story-copy{display:flex;align-items:flex-start;gap:22px}
+    .story-photo{display:block;width:min(38%,220px);height:300px;object-fit:cover;object-position:center;border-radius:4px;flex:none}
+    .story-copy-text{min-width:0}
+    @media(max-width:800px){.hero-collage{min-height:300px}.collage-product{height:125px}.showcase-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.showcase-photo{height:260px}}
+    @media(max-width:560px){.hero-collage{min-height:255px;padding:18px 24px 32px}.collage-product{height:105px}.collage-caption{font-size:13px}.showcase{padding:45px 0}.showcase-grid{gap:11px}.showcase-photo{height:225px;padding:9px}.showcase-info{padding:11px;align-items:flex-start;flex-direction:column}.showcase-info .buy{width:100%;white-space:normal;text-align:center}.story-copy{flex-direction:column}.story-photo{width:min(100%,250px);height:auto;max-height:340px;object-fit:contain}.catalog{padding-top:45px}}
   </style>
 </head>
 <body>
@@ -55,14 +67,20 @@
           <a class="cta" href="#coleccion">Descubrir la colección <span aria-hidden="true">↓</span></a>
           <div class="hero-note">Compra y consultas directamente con el atelier por WhatsApp.</div>
         </div>
-        <div class="hero-art" aria-hidden="true"><div class="fabric-shape"></div><div class="art-caption">Hecho con calma</div></div>
+        <div class="hero-collage" role="img" aria-label="Collage de forros textiles de Gatelier">
+          <img class="collage-product" src="/assets/products/m.webp" alt="" fetchpriority="high">
+          <img class="collage-product" src="/assets/products/s.webp" alt="" fetchpriority="high">
+          <img class="collage-product" src="/assets/products/blue-cream.webp" alt="" fetchpriority="high">
+          <img class="collage-product" src="/assets/products/xl.webp" alt="" fetchpriority="high">
+          <span class="collage-caption">Hecho con calma</span>
+        </div>
       </div>
     </section>
 
     <section class="showcase" id="coleccion">
       <div class="wrap">
         <div class="section-head">
-          <div><div class="eyebrow">Hecho a mano en Gatelier</div><h2>Piezas textiles</h2></div>
+          <div><div class="eyebrow">Hecho a mano en Gatelier</div><h2>Nuestros forros</h2></div>
           <p>Explora algunos tamaños y combinaciones. Consulta por WhatsApp para confirmar el precio y la disponibilidad de cada pieza.</p>
         </div>
         <div id="showcase" class="showcase-grid" aria-label="Galería de piezas de Gatelier"></div>
@@ -82,7 +100,7 @@
     <section class="story" id="atelier">
       <div class="wrap story-grid">
         <div><div class="eyebrow">Atelier textil consciente</div><h2>Una forma más atenta de crear.</h2></div>
-        <div><p>En Gatelier valoramos los materiales, el trabajo artesanal y las piezas pensadas para acompañarte por mucho tiempo. Cada creación nace en el atelier y se ofrece en cantidades cuidadas.</p><div class="story-mark">Vestir también puede ser una manera de cuidar lo que ya existe.</div></div>
+        <div class="story-copy"><img class="story-photo" src="/assets/products/atelier-fabrics.webp" alt="Etiqueta de Gatelier sobre muestras de telas en distintos tonos" loading="lazy" decoding="async"><div class="story-copy-text"><p>En Gatelier valoramos los materiales, el trabajo artesanal y las piezas pensadas para acompañarte por mucho tiempo. Cada creación nace en el atelier y se ofrece en cantidades cuidadas.</p><div class="story-mark">Vestir también puede ser una manera de cuidar lo que ya existe.</div></div></div>
       </div>
     </section>
   </main>
@@ -95,21 +113,23 @@
     const money=value=>new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',maximumFractionDigits:0}).format(Number(value||0));
     const waNumber=String(window.GATELIER_WHATSAPP_NUMBER||'').replace(/\D/g,'');
     const showcaseItems=[
-      {size:'S',image:'s.webp',alt:'Pieza textil tamaño S, en tonos terracota y crudo'},
-      {size:'M',image:'m.webp',alt:'Pieza textil tamaño M, en tonos ocre y azul petróleo'},
-      {size:'M',image:'m2.webp',alt:'Pieza textil tamaño M, en tonos crudo y beige tejido'},
-      {size:'L',image:'l.webp',alt:'Pieza textil tamaño L, en tonos terracota y crudo'},
-      {size:'XL',image:'xl.webp',alt:'Pieza textil tamaño XL, en tonos rosa y oliva'},
-      {size:'XL',image:'xl2.webp',alt:'Pieza textil tamaño XL, en tonos crudo y azul profundo'},
-      {size:'XS',image:'xs2.webp',alt:'Pieza textil tamaño XS, en tonos caramelo y tejido claro'}
+      {label:'Tamaño S',image:'s.webp',alt:'Pieza textil tamaño S, en tonos terracota y crudo'},
+      {label:'Tamaño M',image:'m.webp',alt:'Pieza textil tamaño M, en tonos ocre y azul petróleo'},
+      {label:'Tamaño M',image:'m2.webp',alt:'Pieza textil tamaño M, en tonos crudo y beige tejido'},
+      {label:'Tamaño L',image:'l.webp',alt:'Pieza textil tamaño L, en tonos terracota y crudo'},
+      {label:'Tamaño XL',image:'xl.webp',alt:'Pieza textil tamaño XL, en tonos rosa y oliva'},
+      {label:'Tamaño XL',image:'xl2.webp',alt:'Pieza textil tamaño XL, en tonos crudo y azul profundo'},
+      {label:'Tamaño XS',image:'xs2.webp',alt:'Pieza textil tamaño XS, en tonos caramelo y tejido claro'},
+      {label:'Azul y crudo',image:'blue-cream.webp',alt:'Forro textil en tonos azul y crudo'},
+      {label:'Salvia y azul',image:'sage-blue-pair.webp',alt:'Dos forros textiles, uno salvia y otro azul'}
     ];
     function renderShowcase(){
       const container=document.getElementById('showcase');
       container.innerHTML=showcaseItems.map((item,index)=>{
-        const message=`Hola, vi la pieza tamaño ${item.size} en la página de Gatelier. ¿Me confirman su precio y disponibilidad?`;
+        const message=`Hola, vi la pieza ${item.label} en la página de Gatelier. ¿Me confirman su precio y disponibilidad?`;
         const link=waNumber?`https://wa.me/${waNumber}?text=${encodeURIComponent(message)}`:'';
         const button=waNumber?`<a class="buy" href="${link}" target="_blank" rel="noopener noreferrer">Consultar por WhatsApp ↗</a>`:`<span class="buy disabled" aria-disabled="true">WhatsApp pronto</span>`;
-        return `<article class="showcase-card"><div class="showcase-photo"><img src="/assets/products/${item.image}" alt="${esc(item.alt)}" loading="${index<4?'eager':'lazy'}" decoding="async"></div><div class="showcase-info"><h3>Tamaño ${esc(item.size)}</h3>${button}</div></article>`;
+        return `<article class="showcase-card"><div class="showcase-photo"><img src="/assets/products/${item.image}" alt="${esc(item.alt)}" loading="${index<4?'eager':'lazy'}" decoding="async"></div><div class="showcase-info"><h3>${esc(item.label)}</h3>${button}</div></article>`;
       }).join('');
     }
     function productCard(item){
