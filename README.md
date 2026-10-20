@@ -31,6 +31,25 @@ La portada incluye una guía de tallas a escala con las medidas del forro (ancho
 
 Los botones de las piezas abren WhatsApp para consultar tamaño, precio y disponibilidad; las referencias con precio del inventario también muestran su precio registrado. Configura el número comercial en `frontend/store-config.js` con el formato internacional solo en dígitos. Hasta configurarlo, el botón aparece desactivado. Esta modalidad no crea un pedido en Gatelier ni reserva existencias: disponibilidad y entrega se confirman por WhatsApp.
 
+## Panel de administración
+
+- **Permisos.** Solo los administradores gestionan usuarios y roles, crean, renombran o eliminan categorías, cambian el gasto mensual de producción y reabren órdenes completadas. Las demás cuentas trabajan en inventario y producción.
+- **Roles.** En `/admin/usuarios.html` un administrador puede hacer administrador a otra cuenta o quitarle ese permiso. No puede quitarse su propio permiso y siempre debe quedar un administrador activo. El cambio aplica de inmediato.
+- **Cierre de órdenes.** Al completar una orden se registran las unidades buenas y defectuosas, las horas reales y el material realmente consumido (por defecto, lo previsto). Solo las unidades buenas entran al inventario y absorben el coste real. El coste previsto se conserva por separado para comparar.
+- **Reapertura.** Una orden completada puede reabrirse: los materiales vuelven al inventario y se retiran las unidades producidas, con movimientos «Reversión de producción» en el historial. Se bloquea si esas unidades ya no están en inventario.
+- **Migración.** Al arrancar, la API añade las columnas nuevas de producción sin borrar datos y registra las órdenes ya completadas como «real = previsto», que es lo que ocurrió con la versión anterior. Es idempotente.
+
+## Pruebas
+
+Las pruebas del backend usan un PostgreSQL desechable; nunca apuntes a la base de producción. El nombre de la base debe terminar en `_test`, porque se borra y se recrea en cada ejecución.
+
+```
+pip install -r backend/requirements.txt pytest httpx
+TEST_DATABASE_URL=postgresql://USUARIO@localhost:5432/gatelier_test python -m pytest backend/tests
+```
+
+Cubren permisos, roles, último administrador, cierre con consumos reales y defectuosas, órdenes por encargo, cierre doble, reapertura y su bloqueo, cancelación y que el catálogo público no exponga costes.
+
 ## Ejecución local
 
 Para un entorno local separado:

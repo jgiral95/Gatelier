@@ -99,6 +99,23 @@ async def lifespan(app):
             unit_cost_snapshot NUMERIC(14,2) NOT NULL DEFAULT 0,
             line_cost NUMERIC(14,2) NOT NULL DEFAULT 0,
             consumed_quantity NUMERIC(14,3) NOT NULL DEFAULT 0)""")
+        # Cierre con datos reales: unidades buenas/defectuosas, horas y costes reales separados de los previstos.
+        for col in ("good_quantity NUMERIC(14,3)", "defective_quantity NUMERIC(14,3) NOT NULL DEFAULT 0",
+                    "actual_labor_hours NUMERIC(14,3)", "actual_material_cost NUMERIC(14,2)",
+                    "actual_labor_cost NUMERIC(14,2)", "actual_overhead_cost NUMERIC(14,2)",
+                    "actual_total_cost NUMERIC(14,2)", "actual_unit_cost NUMERIC(14,2)",
+                    "completion_note TEXT NOT NULL DEFAULT ''", "completed_by BIGINT REFERENCES app_users(id)",
+                    "cancelled_at TIMESTAMPTZ", "reopened_at TIMESTAMPTZ", "reopen_count INTEGER NOT NULL DEFAULT 0"):
+            c.execute(f"ALTER TABLE production_orders ADD COLUMN IF NOT EXISTS {col}")
+        c.execute("ALTER TABLE production_order_materials ADD COLUMN IF NOT EXISTS actual_unit_cost NUMERIC(14,2)")
+        # Órdenes completadas antes de esta versión consumieron exactamente lo previsto: se registran así una sola vez.
+        c.execute("""UPDATE production_orders SET good_quantity=planned_quantity, actual_labor_hours=labor_hours,
+            actual_material_cost=material_cost, actual_labor_cost=labor_cost,
+            actual_overhead_cost=batch_overhead+unit_overhead_total+monthly_overhead_total,
+            actual_total_cost=total_cost, actual_unit_cost=unit_cost
+            WHERE status='completed' AND actual_total_cost IS NULL""")
+        c.execute("""UPDATE production_order_materials om SET actual_unit_cost=om.unit_cost_snapshot
+            FROM production_orders o WHERE o.id=om.order_id AND o.status='completed' AND om.actual_unit_cost IS NULL""")
     yield
 
 app=FastAPI(title="Gatelier API",version="0.4.0",lifespan=lifespan)
@@ -169,6 +186,8 @@ class AdminPasswordReset(BaseModel):
     password: str = Field(min_length=10,max_length=256)
 class AdminUserStatus(BaseModel):
     is_active: bool
+class AdminUserRole(BaseModel):
+    role: Literal["admin","user"]
 
 @app.get("/health")
 def health():
@@ -240,6 +259,25 @@ def admin_set_user_status(user_id:int,d:AdminUserStatus,request:Request):
             row=c.execute("UPDATE app_users SET is_active=%s,session_version=session_version+1 WHERE id=%s RETURNING username,is_active",(d.is_active,user_id)).fetchone()
     return {"message":("Usuario activado" if d.is_active else "Usuario desactivado")+f": {row[0]}","username":row[0],"is_active":row[1]}
 
+@app.patch("/admin/users/{user_id}/role")
+def admin_set_user_role(user_id:int,d:AdminUserRole,request:Request):
+    actor=require_admin(request)
+    if user_id==actor["id"] and d.role!="admin":
+        raise HTTPException(400,"No puedes quitarte tus propios permisos de administrador")
+    with psycopg.connect(DB) as c:
+        with c.transaction():
+            c.execute("LOCK TABLE app_users IN EXCLUSIVE MODE")
+            target=c.execute("SELECT id,username,role,is_active FROM app_users WHERE id=%s FOR UPDATE",(user_id,)).fetchone()
+            if not target: raise HTTPException(404,"Usuario no encontrado")
+            if target[2]==d.role:
+                return {"message":f"{target[1]} ya tiene ese permiso","username":target[1],"role":target[2]}
+            if target[2]=="admin" and target[3]:
+                n=c.execute("SELECT COUNT(*) FROM app_users WHERE role='admin' AND is_active=TRUE").fetchone()[0]
+                if n<=1: raise HTTPException(400,"Debe quedar al menos un administrador activo")
+            row=c.execute("UPDATE app_users SET role=%s WHERE id=%s RETURNING username,role",(d.role,user_id)).fetchone()
+    label="Administrador" if row[1]=="admin" else "Usuario"
+    return {"message":f"{row[0]} ahora es {label}","username":row[0],"role":row[1]}
+
 @app.get("/dashboard")
 def dashboard(request:Request):
     u=user_from(request);return {"message":"Bienvenido a Gatelier","username":u["username"],"modules":["Inventario","Ventas","Producción","Costes"]}
@@ -252,7 +290,7 @@ def list_categories(request:Request):
 
 @app.post("/categories",status_code=201)
 def create_category(d:CategoryCreate,request:Request):
-    user_from(request); name=d.name.strip()
+    require_admin(request); name=d.name.strip()
     if not name: raise HTTPException(422,"El nombre de la categoría es obligatorio")
     try:
         with psycopg.connect(DB) as c:
@@ -262,7 +300,7 @@ def create_category(d:CategoryCreate,request:Request):
 
 @app.patch("/categories/{category_id}")
 def rename_category(category_id:int,d:CategoryUpdate,request:Request):
-    user_from(request); name=d.name.strip()
+    require_admin(request); name=d.name.strip()
     if not name: raise HTTPException(422,"El nombre de la categoría es obligatorio")
     try:
         with psycopg.connect(DB) as c:
@@ -276,7 +314,7 @@ def rename_category(category_id:int,d:CategoryUpdate,request:Request):
 
 @app.delete("/categories/{category_id}")
 def delete_category(category_id:int,request:Request):
-    user_from(request)
+    require_admin(request)
     with psycopg.connect(DB) as c:
         cat=c.execute("SELECT name FROM inventory_categories WHERE id=%s AND is_active FOR UPDATE",(category_id,)).fetchone()
         if not cat: raise HTTPException(404,"Categoría no encontrada")
@@ -390,7 +428,7 @@ def all_movements(request:Request,search:str=Query("",max_length=120),movement_t
               AND (%s='all' OR m.movement_type=%s)
             ORDER BY m.created_at DESC,m.id DESC LIMIT 1000""",
             (product_id,product_id,search.strip(),term,term,term,term,movement_type,movement_type)).fetchall()
-    labels={"initial":"Existencia inicial","receipt":"Entrada valorizada","add":"Entrada manual","remove":"Salida manual","production_consumption":"Consumo de producción","production_output":"Producto terminado de producción"}
+    labels={"initial":"Existencia inicial","receipt":"Entrada valorizada","add":"Entrada manual","remove":"Salida manual","production_consumption":"Consumo de producción","production_output":"Producto terminado de producción","production_reversal":"Reversión de producción"}
     return {"items":[{"id":r[0],"type":r[1],"type_label":labels.get(r[1],r[1].replace('_',' ').capitalize()),
         "delta":r[2],"quantity_after":r[3],"note":r[4],"created_at":r[5],"username":r[6],
         "unit_cost_before":r[7],"unit_cost_after":r[8],"product_id":r[9],"sku":r[10],"product_name":r[11],"unit":r[12]} for r in rows]}
@@ -429,6 +467,16 @@ class ProductionOrderCreate(BaseModel):
     hourly_rate: Optional[Decimal] = Field(default=None, ge=0, le=999999999)
     batch_overhead: Decimal = Field(default=Decimal(0), ge=0, le=999999999)
     unit_overhead: Decimal = Field(default=Decimal(0), ge=0, le=999999999)
+    note: str = Field(default="", max_length=1000)
+
+class OrderMaterialActual(BaseModel):
+    product_id: int
+    quantity: Decimal = Field(ge=0, le=999999999)
+class ProductionOrderComplete(BaseModel):
+    good_quantity: Optional[Decimal] = Field(default=None, ge=0, le=999999)
+    defective_quantity: Decimal = Field(default=Decimal(0), ge=0, le=999999)
+    labor_hours: Optional[Decimal] = Field(default=None, ge=0, le=999999)
+    materials: Optional[List[OrderMaterialActual]] = Field(default=None, max_length=100)
     note: str = Field(default="", max_length=1000)
 
 def _month_date(value: str) -> date:
@@ -504,7 +552,7 @@ def get_monthly_overhead(period: str, request: Request):
 
 @app.put("/production/overheads/{period}")
 def save_monthly_overhead(period: str, d: MonthlyOverheadInput, request: Request):
-    u=user_from(request); p=_month_date(period)
+    u=require_admin(request); p=_month_date(period)
     with psycopg.connect(DB) as c:
         r=c.execute("""INSERT INTO production_monthly_overheads(period,amount,planned_units,note,updated_by,updated_at)
             VALUES(%s,%s,%s,%s,%s,NOW()) ON CONFLICT(period) DO UPDATE SET amount=EXCLUDED.amount,
@@ -512,21 +560,46 @@ def save_monthly_overhead(period: str, d: MonthlyOverheadInput, request: Request
             RETURNING period,amount,planned_units,note""",(p,d.amount,d.planned_units,d.note.strip(),u['id'])).fetchone()
     return {"period":r[0].strftime('%Y-%m'),"amount":r[1],"planned_units":r[2],"note":r[3],"configured":True,"cost_per_unit":(r[1]/r[2]).quantize(Decimal('0.01'))}
 
+ORDER_COLUMNS = """o.id,o.recipe_id,r.name,o.finished_product_id,p.sku,p.name,o.planned_quantity,p.unit,
+    o.destination_mode,o.status,o.monthly_period,o.material_cost,o.labor_hours,o.hourly_rate,o.labor_cost,
+    o.batch_overhead,o.unit_overhead_total,o.monthly_overhead_total,o.total_cost,o.unit_cost,o.note,o.created_at,o.started_at,o.completed_at,
+    o.good_quantity,o.defective_quantity,o.actual_labor_hours,o.actual_material_cost,o.actual_labor_cost,o.actual_overhead_cost,
+    o.actual_total_cost,o.actual_unit_cost,o.completion_note,cu.username,o.cancelled_at,o.reopened_at,o.reopen_count"""
+ORDER_FROM = """FROM production_orders o JOIN production_recipes r ON r.id=o.recipe_id
+    JOIN inventory_products p ON p.id=o.finished_product_id
+    LEFT JOIN app_users cu ON cu.id=o.completed_by"""
+
+def _order_dict(r):
+    return {"id":r[0],"recipe_id":r[1],"recipe_name":r[2],"product_id":r[3],"sku":r[4],"product_name":r[5],
+        "quantity":r[6],"unit":r[7],"destination_mode":r[8],"status":r[9],"monthly_period":r[10].strftime('%Y-%m'),
+        "material_cost":r[11],"labor_hours":r[12],"hourly_rate":r[13],"labor_cost":r[14],"batch_overhead":r[15],
+        "unit_overhead_total":r[16],"monthly_overhead_total":r[17],"total_cost":r[18],"unit_cost":r[19],"note":r[20],
+        "created_at":r[21],"started_at":r[22],"completed_at":r[23],
+        "good_quantity":r[24],"defective_quantity":r[25],"actual_labor_hours":r[26],"actual_material_cost":r[27],
+        "actual_labor_cost":r[28],"actual_overhead_cost":r[29],"actual_total_cost":r[30],"actual_unit_cost":r[31],
+        "completion_note":r[32],"completed_by":r[33],"cancelled_at":r[34],"reopened_at":r[35],"reopen_count":r[36]}
+
 @app.get("/production/orders")
 def production_orders(request: Request, status: str = Query("all",pattern="^(all|planned|in_progress|completed|cancelled)$")):
     user_from(request)
     with psycopg.connect(DB) as c:
-        rows=c.execute("""SELECT o.id,o.recipe_id,r.name,o.finished_product_id,p.sku,p.name,o.planned_quantity,p.unit,
-            o.destination_mode,o.status,o.monthly_period,o.material_cost,o.labor_hours,o.hourly_rate,o.labor_cost,
-            o.batch_overhead,o.unit_overhead_total,o.monthly_overhead_total,o.total_cost,o.unit_cost,o.note,o.created_at,o.started_at,o.completed_at
-            FROM production_orders o JOIN production_recipes r ON r.id=o.recipe_id
-            JOIN inventory_products p ON p.id=o.finished_product_id
+        rows=c.execute(f"""SELECT {ORDER_COLUMNS} {ORDER_FROM}
             WHERE (%s='all' OR o.status=%s) ORDER BY o.created_at DESC,o.id DESC LIMIT 500""",(status,status)).fetchall()
-    return {"items":[{"id":r[0],"recipe_id":r[1],"recipe_name":r[2],"product_id":r[3],"sku":r[4],"product_name":r[5],
-        "quantity":r[6],"unit":r[7],"destination_mode":r[8],"status":r[9],"monthly_period":r[10].strftime('%Y-%m'),
-        "material_cost":r[11],"labor_hours":r[12],"hourly_rate":r[13],"labor_cost":r[14],"batch_overhead":r[15],
-        "unit_overhead_total":r[16],"monthly_overhead_total":r[17],"total_cost":r[18],"unit_cost":r[19],"note":r[20],
-        "created_at":r[21],"started_at":r[22],"completed_at":r[23]} for r in rows]}
+    return {"items":[_order_dict(r) for r in rows]}
+
+@app.get("/production/orders/{order_id}")
+def production_order_detail(order_id: int, request: Request):
+    user_from(request)
+    with psycopg.connect(DB) as c:
+        r=c.execute(f"SELECT {ORDER_COLUMNS} {ORDER_FROM} WHERE o.id=%s",(order_id,)).fetchone()
+        if not r: raise HTTPException(404,"Orden de producción no encontrada")
+        mats=c.execute("""SELECT om.product_id,p.sku,p.name,p.unit,om.required_quantity,om.consumed_quantity,
+            om.unit_cost_snapshot,om.actual_unit_cost,p.quantity,p.unit_cost
+            FROM production_order_materials om JOIN inventory_products p ON p.id=om.product_id
+            WHERE om.order_id=%s ORDER BY p.name""",(order_id,)).fetchall()
+    return {**_order_dict(r),"materials":[{"product_id":m[0],"sku":m[1],"name":m[2],"unit":m[3],
+        "required_quantity":m[4],"consumed_quantity":m[5],"planned_unit_cost":m[6],"actual_unit_cost":m[7],
+        "available_quantity":m[8],"current_unit_cost":m[9]} for m in mats]}
 
 @app.post("/production/orders", status_code=201)
 def create_production_order(d: ProductionOrderCreate, request: Request):
@@ -579,38 +652,106 @@ def start_production_order(order_id: int, request: Request):
     return {"id":order_id,"status":"in_progress"}
 
 @app.post("/production/orders/{order_id}/complete")
-def complete_production_order(order_id: int, request: Request):
-    u=user_from(request)
+def complete_production_order(order_id: int, request: Request, d: Optional[ProductionOrderComplete] = None):
+    """Cierra la orden con lo que realmente pasó. Sin datos, asume que se cumplió exactamente lo previsto."""
+    u=user_from(request); d=d or ProductionOrderComplete()
     with psycopg.connect(DB) as c:
-        o=c.execute("""SELECT id,finished_product_id,planned_quantity,destination_mode,status,unit_cost,total_cost
+        o=c.execute("""SELECT id,finished_product_id,planned_quantity,destination_mode,status,hourly_rate,labor_hours,
+            batch_overhead,unit_overhead_total,monthly_overhead_total
             FROM production_orders WHERE id=%s FOR UPDATE""",(order_id,)).fetchone()
         if not o: raise HTTPException(404,"Orden de producción no encontrada")
         if o[4] not in ('planned','in_progress'): raise HTTPException(409,"La orden ya fue cerrada o cancelada")
-        mats=c.execute("""SELECT om.product_id,om.required_quantity,om.unit_cost_snapshot,p.quantity,p.unit,p.name
-            FROM production_order_materials om JOIN inventory_products p ON p.id=om.product_id
-            WHERE om.order_id=%s ORDER BY om.product_id FOR UPDATE OF p""",(order_id,)).fetchall()
-        for m in mats:
-            if m[3] < m[1]: raise HTTPException(409,f"Stock insuficiente de {m[5]}: disponible {m[3]} {m[4]}, necesario {m[1]} {m[4]}")
-            require_integer_quantity(m[1],m[4],f"El consumo de {m[5]}")
+        planned=o[2]
+        good=planned if d.good_quantity is None else d.good_quantity
+        defective=d.defective_quantity
+        processed=good+defective
+        if processed<=0: raise HTTPException(422,"Registra al menos una unidad buena o defectuosa")
         out=c.execute("SELECT quantity,unit_cost,unit FROM inventory_products WHERE id=%s AND is_active FOR UPDATE",(o[1],)).fetchone()
         if not out: raise HTTPException(404,"El producto terminado ya no está activo")
-        require_integer_quantity(o[2],out[2],"La cantidad producida")
+        require_integer_quantity(good,out[2],"Las unidades buenas")
+        require_integer_quantity(defective,out[2],"Las unidades defectuosas")
+        mats=c.execute("""SELECT om.product_id,om.required_quantity,p.quantity,p.unit,p.name,p.unit_cost
+            FROM production_order_materials om JOIN inventory_products p ON p.id=om.product_id
+            WHERE om.order_id=%s ORDER BY om.product_id FOR UPDATE OF p""",(order_id,)).fetchall()
+        actual={m.product_id:m.quantity for m in (d.materials or [])}
+        known={m[0] for m in mats}
+        extra=set(actual)-known
+        if extra: raise HTTPException(422,"Solo puedes registrar consumos de los materiales de la orden")
+        lines=[]; material_cost=Decimal(0)
         for m in mats:
-            newq=m[3]-m[1]
-            c.execute("UPDATE inventory_products SET quantity=%s,updated_at=NOW() WHERE id=%s",(newq,m[0]))
-            c.execute("""INSERT INTO inventory_movements(product_id,user_id,movement_type,quantity_delta,quantity_after,note,unit_cost_before,unit_cost_after)
-                VALUES(%s,%s,'production_consumption',%s,%s,%s,%s,%s)""",(m[0],u['id'],-m[1],newq,f"Consumo de producción · Orden #{order_id}",m[2],m[2]))
-            c.execute("UPDATE production_order_materials SET consumed_quantity=%s WHERE order_id=%s AND product_id=%s",(m[1],order_id,m[0]))
-        if o[3] == 'stock':
-            oldq,oldcost=out[0],out[1]; newq=oldq+o[2]
-            newcost=o[6] if newq==0 else ((oldq*oldcost)+(o[2]*o[5]))/newq
-            newcost=newcost.quantize(Decimal('0.01'))
+            used=actual.get(m[0],m[1])
+            require_integer_quantity(used,m[3],f"El consumo de {m[4]}")
+            if m[2] < used: raise HTTPException(409,f"Stock insuficiente de {m[4]}: disponible {m[2]} {m[3]}, consumido {used} {m[3]}")
+            line=(used*m[5]).quantize(Decimal('0.01'))
+            material_cost+=line
+            lines.append((m[0],used,m[2],m[5],m[4]))
+        hours=o[6] if d.labor_hours is None else d.labor_hours
+        labor_cost=(hours*o[5]).quantize(Decimal('0.01'))
+        # Gastos por unidad y mensuales se asignan por unidad procesada (buenas + defectuosas); el de lote completo.
+        ratio=processed/planned
+        overhead=(o[7]+(o[8]+o[9])*ratio).quantize(Decimal('0.01'))
+        total=(material_cost+labor_cost+overhead).quantize(Decimal('0.01'))
+        unit_cost=(total/good).quantize(Decimal('0.01')) if good>0 else None
+        for pid,used,stock,cost,name in lines:
+            if used>0:
+                newq=stock-used
+                c.execute("UPDATE inventory_products SET quantity=%s,updated_at=NOW() WHERE id=%s",(newq,pid))
+                c.execute("""INSERT INTO inventory_movements(product_id,user_id,movement_type,quantity_delta,quantity_after,note,unit_cost_before,unit_cost_after)
+                    VALUES(%s,%s,'production_consumption',%s,%s,%s,%s,%s)""",(pid,u['id'],-used,newq,f"Consumo de producción · Orden #{order_id}",cost,cost))
+            c.execute("UPDATE production_order_materials SET consumed_quantity=%s,actual_unit_cost=%s WHERE order_id=%s AND product_id=%s",(used,cost,order_id,pid))
+        added=False
+        if o[3]=='stock' and good>0:
+            oldq,oldcost=out[0],out[1]; newq=oldq+good
+            newcost=(((oldq*oldcost)+(good*unit_cost))/newq).quantize(Decimal('0.01'))
             c.execute("UPDATE inventory_products SET quantity=%s,unit_cost=%s,updated_at=NOW() WHERE id=%s",(newq,newcost,o[1]))
             c.execute("""INSERT INTO inventory_movements(product_id,user_id,movement_type,quantity_delta,quantity_after,note,unit_cost_before,unit_cost_after)
-                VALUES(%s,%s,'production_output',%s,%s,%s,%s,%s)""",(o[1],u['id'],o[2],newq,f"Producción terminada · Orden #{order_id}",oldcost,newcost))
-        c.execute("UPDATE production_orders SET status='completed',completed_at=NOW() WHERE id=%s",(order_id,))
-    return {"id":order_id,"status":"completed","destination_mode":o[3],"quantity":o[2],"unit_cost":o[5],"total_cost":o[6],
-        "message":"Producción completada. Materiales descontados y producto terminado añadido al inventario." if o[3]=='stock' else "Producción completada para pedido. Materiales descontados; producto terminado no añadido al stock disponible."}
+                VALUES(%s,%s,'production_output',%s,%s,%s,%s,%s)""",(o[1],u['id'],good,newq,f"Producción terminada · Orden #{order_id}",oldcost,newcost))
+            added=True
+        c.execute("""UPDATE production_orders SET status='completed',completed_at=NOW(),completed_by=%s,
+            good_quantity=%s,defective_quantity=%s,actual_labor_hours=%s,actual_material_cost=%s,actual_labor_cost=%s,
+            actual_overhead_cost=%s,actual_total_cost=%s,actual_unit_cost=%s,completion_note=%s WHERE id=%s""",
+            (u['id'],good,defective,hours,material_cost,labor_cost,overhead,total,unit_cost,d.note.strip(),order_id))
+    msg="Producción completada. Materiales descontados"
+    msg+=f" y {good} unidad(es) buena(s) añadida(s) al inventario." if added else ("; producto por encargo, no se añade al stock disponible." if o[3]!='stock' else "; no hubo unidades buenas para añadir al inventario.")
+    return {"id":order_id,"status":"completed","destination_mode":o[3],"good_quantity":good,"defective_quantity":defective,
+        "actual_material_cost":material_cost,"actual_labor_cost":labor_cost,"actual_overhead_cost":overhead,
+        "actual_total_cost":total,"actual_unit_cost":unit_cost,"message":msg}
+
+@app.post("/production/orders/{order_id}/reopen")
+def reopen_production_order(order_id: int, request: Request):
+    """Revierte una orden completada con movimientos explícitos y la deja en proceso."""
+    u=require_admin(request)
+    with psycopg.connect(DB) as c:
+        o=c.execute("""SELECT id,finished_product_id,destination_mode,status,good_quantity,actual_unit_cost
+            FROM production_orders WHERE id=%s FOR UPDATE""",(order_id,)).fetchone()
+        if not o: raise HTTPException(404,"Orden de producción no encontrada")
+        if o[3]!='completed': raise HTTPException(409,"Solo se pueden reabrir órdenes completadas")
+        if o[2]=='stock' and o[4] and o[4]>0:
+            out=c.execute("SELECT quantity,unit_cost FROM inventory_products WHERE id=%s FOR UPDATE",(o[1],)).fetchone()
+            if out[0] < o[4]:
+                raise HTTPException(409,f"No se puede reabrir: el inventario del producto terminado ({out[0]}) es menor que las unidades que produjo esta orden ({o[4]}). Puede que ya se hayan vendido o usado.")
+            newq=out[0]-o[4]
+            newcost=out[1]
+            if newq>0 and o[5] is not None:
+                calc=((out[0]*out[1])-(o[4]*o[5]))/newq
+                if calc>=0: newcost=calc.quantize(Decimal('0.01'))
+            c.execute("UPDATE inventory_products SET quantity=%s,unit_cost=%s,updated_at=NOW() WHERE id=%s",(newq,newcost,o[1]))
+            c.execute("""INSERT INTO inventory_movements(product_id,user_id,movement_type,quantity_delta,quantity_after,note,unit_cost_before,unit_cost_after)
+                VALUES(%s,%s,'production_reversal',%s,%s,%s,%s,%s)""",(o[1],u['id'],-o[4],newq,f"Reapertura · Orden #{order_id}: se retiran unidades producidas",out[1],newcost))
+        mats=c.execute("""SELECT om.product_id,om.consumed_quantity,p.quantity,p.unit_cost
+            FROM production_order_materials om JOIN inventory_products p ON p.id=om.product_id
+            WHERE om.order_id=%s AND om.consumed_quantity>0 ORDER BY om.product_id FOR UPDATE OF p""",(order_id,)).fetchall()
+        for pid,used,stock,cost in mats:
+            newq=stock+used
+            c.execute("UPDATE inventory_products SET quantity=%s,updated_at=NOW() WHERE id=%s",(newq,pid))
+            c.execute("""INSERT INTO inventory_movements(product_id,user_id,movement_type,quantity_delta,quantity_after,note,unit_cost_before,unit_cost_after)
+                VALUES(%s,%s,'production_reversal',%s,%s,%s,%s,%s)""",(pid,u['id'],used,newq,f"Reapertura · Orden #{order_id}: devolución de material",cost,cost))
+        c.execute("UPDATE production_order_materials SET consumed_quantity=0,actual_unit_cost=NULL WHERE order_id=%s",(order_id,))
+        c.execute("""UPDATE production_orders SET status='in_progress',started_at=COALESCE(started_at,NOW()),completed_at=NULL,completed_by=NULL,
+            good_quantity=NULL,defective_quantity=0,actual_labor_hours=NULL,actual_material_cost=NULL,actual_labor_cost=NULL,
+            actual_overhead_cost=NULL,actual_total_cost=NULL,actual_unit_cost=NULL,completion_note='',
+            reopened_at=NOW(),reopen_count=reopen_count+1 WHERE id=%s""",(order_id,))
+    return {"id":order_id,"status":"in_progress","message":f"Orden #{order_id} reabierta. Materiales devueltos al inventario y producción revertida."}
 
 @app.post("/production/orders/{order_id}/cancel")
 def cancel_production_order(order_id: int, request: Request):
@@ -619,5 +760,5 @@ def cancel_production_order(order_id: int, request: Request):
         r=c.execute("SELECT status FROM production_orders WHERE id=%s FOR UPDATE",(order_id,)).fetchone()
         if not r: raise HTTPException(404,"Orden de producción no encontrada")
         if r[0] not in ('planned','in_progress'): raise HTTPException(409,"Solo se pueden cancelar órdenes abiertas")
-        c.execute("UPDATE production_orders SET status='cancelled' WHERE id=%s",(order_id,))
+        c.execute("UPDATE production_orders SET status='cancelled',cancelled_at=NOW() WHERE id=%s",(order_id,))
     return {"id":order_id,"status":"cancelled"}
