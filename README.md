@@ -45,6 +45,7 @@ Los botones de las piezas abren WhatsApp para consultar tamaño, precio y dispon
   - gasto mensual configurado frente a lo que realmente se repartió en piezas producidas;
   - margen de los últimos seis meses.
   El envío cobrado no cuenta como ingreso porque no se registra su coste.
+- **Inversiones.** En `/admin/inversiones.html` un administrador registra máquinas, herramientas y mejoras del taller con fecha de compra, valor, valor de reventa opcional y vida útil. Cada una se deprecia en línea recta, (valor − reventa) ÷ meses, desde el mes de compra hasta el final de su vida útil. Esa depreciación se suma sola al gasto mensual de producción y entra al coste de las órdenes nuevas; las órdenes ya creadas conservan su coste aunque se corrija una inversión. Un equipo vendido o dañado se da de baja con fecha y motivo, deja de depreciarse desde ese mes y no se borra. La página muestra el valor pendiente por repartir y cuánto del margen de las ventas desde la primera inversión ya la cubre. Es una herramienta de gestión, no contabilidad: las vidas útiles fiscales las define la norma colombiana.
 - **Zona horaria.** La fecha por defecto de una venta usa `APP_TIMEZONE` (por defecto `America/Bogota`); si la imagen no trae datos de zonas horarias, se usa UTC−5.
 - **Migración.** Al arrancar, la API añade las columnas nuevas de producción sin borrar datos y registra las órdenes ya completadas como «real = previsto», que es lo que ocurrió con la versión anterior. Es idempotente.
 
@@ -57,7 +58,7 @@ pip install -r backend/requirements.txt pytest httpx
 TEST_DATABASE_URL=postgresql://USUARIO@localhost:5432/gatelier_test python -m pytest backend/tests
 ```
 
-Cubren el informe de costes con un escenario de cifras conocidas, ventas (stock, coste histórico, descuentos, doble envío, anulación y resumen del mes), permisos, roles, último administrador, cierre con consumos reales y defectuosas, órdenes por encargo, cierre doble, reapertura y su bloqueo, cancelación y que el catálogo público no exponga costes.
+Cubren inversiones y depreciación (inicio, fin de vida útil, baja, valor de reventa, efecto en órdenes nuevas y no en las anteriores), el informe de costes con un escenario de cifras conocidas, ventas (stock, coste histórico, descuentos, doble envío, anulación y resumen del mes), permisos, roles, último administrador, cierre con consumos reales y defectuosas, órdenes por encargo, cierre doble, reapertura y su bloqueo, cancelación y que el catálogo público no exponga costes.
 
 ## Ejecución local
 

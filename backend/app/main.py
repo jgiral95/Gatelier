@@ -131,6 +131,17 @@ async def lifespan(app):
             UNIQUE(sale_id,product_id))""")
         c.execute("CREATE INDEX IF NOT EXISTS sales_date_idx ON sales(sale_date)")
         c.execute("ALTER TABLE inventory_movements ADD COLUMN IF NOT EXISTS sale_id BIGINT REFERENCES sales(id)")
+        # Inversiones: equipos y mejoras que se deprecian en línea recta desde el mes de compra.
+        c.execute("""CREATE TABLE IF NOT EXISTS investments(
+            id BIGSERIAL PRIMARY KEY, name VARCHAR(160) NOT NULL,
+            category VARCHAR(20) NOT NULL DEFAULT 'equipment' CHECK(category IN ('equipment','tools','workshop','other')),
+            purchase_date DATE NOT NULL, amount NUMERIC(14,2) NOT NULL CHECK(amount>0),
+            salvage_value NUMERIC(14,2) NOT NULL DEFAULT 0 CHECK(salvage_value>=0),
+            useful_life_months INTEGER NOT NULL CHECK(useful_life_months BETWEEN 1 AND 600),
+            note TEXT NOT NULL DEFAULT '', retired_date DATE, retire_reason TEXT NOT NULL DEFAULT '',
+            created_by BIGINT REFERENCES app_users(id), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_by BIGINT REFERENCES app_users(id), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            CHECK(salvage_value<amount), CHECK(retired_date IS NULL OR retired_date>=purchase_date))""")
         # Órdenes completadas antes de esta versión consumieron exactamente lo previsto: se registran así una sola vez.
         c.execute("""UPDATE production_orders SET good_quantity=planned_quantity, actual_labor_hours=labor_hours,
             actual_material_cost=material_cost, actual_labor_cost=labor_cost,
@@ -570,8 +581,8 @@ def get_monthly_overhead(period: str, request: Request):
     user_from(request); p=_month_date(period)
     with psycopg.connect(DB) as c:
         r=c.execute("SELECT period,amount,planned_units,note FROM production_monthly_overheads WHERE period=%s",(p,)).fetchone()
-    if not r: return {"period":period,"amount":Decimal(0),"planned_units":Decimal(1),"note":"","configured":False,"cost_per_unit":Decimal(0)}
-    return {"period":r[0].strftime('%Y-%m'),"amount":r[1],"planned_units":r[2],"note":r[3],"configured":True,"cost_per_unit":(r[1]/r[2]).quantize(Decimal('0.01'))}
+        dep=_depreciation_for_month(c,p)
+    return _overhead_payload(period,r,dep)
 
 @app.put("/production/overheads/{period}")
 def save_monthly_overhead(period: str, d: MonthlyOverheadInput, request: Request):
@@ -581,7 +592,8 @@ def save_monthly_overhead(period: str, d: MonthlyOverheadInput, request: Request
             VALUES(%s,%s,%s,%s,%s,NOW()) ON CONFLICT(period) DO UPDATE SET amount=EXCLUDED.amount,
             planned_units=EXCLUDED.planned_units,note=EXCLUDED.note,updated_by=EXCLUDED.updated_by,updated_at=NOW()
             RETURNING period,amount,planned_units,note""",(p,d.amount,d.planned_units,d.note.strip(),u['id'])).fetchone()
-    return {"period":r[0].strftime('%Y-%m'),"amount":r[1],"planned_units":r[2],"note":r[3],"configured":True,"cost_per_unit":(r[1]/r[2]).quantize(Decimal('0.01'))}
+        dep=_depreciation_for_month(c,p)
+    return _overhead_payload(period,r,dep)
 
 ORDER_COLUMNS = """o.id,o.recipe_id,r.name,o.finished_product_id,p.sku,p.name,o.planned_quantity,p.unit,
     o.destination_mode,o.status,o.monthly_period,o.material_cost,o.labor_hours,o.hourly_rate,o.labor_cost,
@@ -650,7 +662,8 @@ def create_production_order(d: ProductionOrderCreate, request: Request):
         overhead=c.execute("SELECT amount,planned_units FROM production_monthly_overheads WHERE period=%s",(period,)).fetchone()
         monthly_total=Decimal(0)
         if overhead:
-            monthly_total=(overhead[0]/overhead[1]*qty).quantize(Decimal('0.01'))
+            # Gasto fijo del mes + depreciación de equipos, repartidos entre las unidades previstas.
+            monthly_total=((overhead[0]+_depreciation_for_month(c,period))/overhead[1]*qty).quantize(Decimal('0.01'))
         total=(material_total+labor_cost+d.batch_overhead+unit_overhead_total+monthly_total).quantize(Decimal('0.01'))
         unit_cost=(total/qty).quantize(Decimal('0.01'))
         oid=c.execute("""INSERT INTO production_orders(recipe_id,finished_product_id,planned_quantity,destination_mode,monthly_period,
@@ -1044,8 +1057,11 @@ def costs_report(request: Request, month: str = Query(..., pattern=r"^\d{4}-\d{2
         absorbed=c.execute("""SELECT COALESCE(SUM(monthly_overhead_total*(COALESCE(good_quantity,0)+defective_quantity)/planned_quantity),0),
                 COALESCE(SUM(COALESCE(good_quantity,0)+defective_quantity),0)
             FROM production_orders WHERE status='completed' AND monthly_period=%s""",(start,)).fetchone()
-        overhead={"configured":oh is not None,"amount":oh[0] if oh else Decimal(0),"planned_units":oh[1] if oh else None,
-                  "note":oh[2] if oh else "","absorbed":absorbed[0].quantize(Q2),"units_charged":absorbed[1]}
+        dep=_depreciation_for_month(c,start)
+        fixed=oh[0] if oh else Decimal(0)
+        overhead={"configured":oh is not None,"fixed_amount":fixed,"depreciation":dep,"amount":(fixed+dep).quantize(Q2),
+                  "planned_units":oh[1] if oh else None,"note":oh[2] if oh else "",
+                  "absorbed":absorbed[0].quantize(Q2),"units_charged":absorbed[1]}
         overhead["unabsorbed"]=(overhead["amount"]-overhead["absorbed"]).quantize(Q2) if oh else Decimal(0)
 
         # Tendencia de los últimos seis meses (incluido el elegido).
@@ -1065,3 +1081,149 @@ def costs_report(request: Request, month: str = Query(..., pattern=r"^\d{4}-\d{2
                  "margin":net-cogs,"margin_pct":(((net-cogs)/net)*100).quantize(Decimal('0.1')) if net else None,
                  "units":sum((p["units"] for p in products),Decimal(0))},
         "products":products,"production":prod,"produced":produced,"overhead":overhead,"trend":trend}
+
+
+
+# ----------------------------- INVERSIONES -----------------------------
+INVESTMENT_CATEGORIES={"equipment":"Máquinas y equipos","tools":"Herramientas","workshop":"Adecuación del taller","other":"Otro"}
+
+class InvestmentInput(BaseModel):
+    name: str = Field(min_length=2, max_length=160)
+    category: Literal["equipment","tools","workshop","other"] = "equipment"
+    purchase_date: date
+    amount: Decimal = Field(gt=0, le=9999999999)
+    salvage_value: Decimal = Field(default=Decimal(0), ge=0, le=9999999999)
+    useful_life_months: int = Field(ge=1, le=600)
+    note: str = Field(default="", max_length=1000)
+class InvestmentRetire(BaseModel):
+    retired_date: date
+    reason: str = Field(min_length=3, max_length=500)
+
+def _months_between(a: date, b: date) -> int:
+    """Meses completos de calendario de a hasta b (ambos como primer día de mes)."""
+    return (b.year-a.year)*12+(b.month-a.month)
+
+def _inv_monthly(amount, salvage, life):
+    return ((amount-salvage)/life)
+
+def _inv_months_charged(purchase: date, life: int, retired: Optional[date], upto: date) -> int:
+    """Meses depreciados desde el mes de compra hasta 'upto' (incluido). Se detiene al terminar la vida útil o desde el mes de baja."""
+    start=purchase.replace(day=1); upto=upto.replace(day=1)
+    n=_months_between(start,upto)+1
+    if n<=0: return 0
+    n=min(n,life)
+    if retired:
+        n=min(n,max(0,_months_between(start,retired.replace(day=1))))
+    return n
+
+def _depreciation_for_month(c, month: date) -> Decimal:
+    month=month.replace(day=1)
+    rows=c.execute("""SELECT amount,salvage_value,useful_life_months,purchase_date,retired_date FROM investments
+        WHERE purchase_date<%s""",(_shift_month(month,1),)).fetchall()
+    total=Decimal(0)
+    for amount,salvage,life,purchase,retired in rows:
+        here=_inv_months_charged(purchase,life,retired,month)
+        before=_inv_months_charged(purchase,life,retired,_shift_month(month,-1))
+        if here>before: total+=_inv_monthly(amount,salvage,life)
+    return total.quantize(Q2)
+
+def _overhead_payload(period, r, dep):
+    if not r:
+        return {"period":period,"amount":Decimal(0),"planned_units":Decimal(1),"note":"","configured":False,
+                "depreciation":dep,"total_amount":dep,"cost_per_unit":Decimal(0)}
+    total=(r[1]+dep).quantize(Q2)
+    return {"period":r[0].strftime('%Y-%m'),"amount":r[1],"planned_units":r[2],"note":r[3],"configured":True,
+            "depreciation":dep,"total_amount":total,"cost_per_unit":(total/r[2]).quantize(Q2)}
+
+INV_COLUMNS="""i.id,i.name,i.category,i.purchase_date,i.amount,i.salvage_value,i.useful_life_months,i.note,i.retired_date,i.retire_reason,
+    cu.username,i.created_at,uu.username,i.updated_at"""
+INV_FROM="""FROM investments i LEFT JOIN app_users cu ON cu.id=i.created_by LEFT JOIN app_users uu ON uu.id=i.updated_by"""
+
+def _investment_dict(r, today: date):
+    monthly=_inv_monthly(r[4],r[5],r[6])
+    charged=_inv_months_charged(r[3],r[6],r[8],today)
+    accumulated=(monthly*charged).quantize(Q2) if charged<r[6] else (r[4]-r[5]).quantize(Q2)
+    book=(r[4]-accumulated).quantize(Q2)
+    end=_shift_month(r[3].replace(day=1),r[6]-1)
+    if r[8]: status="retired"
+    elif charged>=r[6]: status="fully_depreciated"
+    else: status="active"
+    return {"id":r[0],"name":r[1],"category":r[2],"category_label":INVESTMENT_CATEGORIES.get(r[2],r[2]),
+        "purchase_date":r[3].isoformat(),"amount":r[4],"salvage_value":r[5],"useful_life_months":r[6],"note":r[7],
+        "retired_date":r[8].isoformat() if r[8] else None,"retire_reason":r[9],
+        "monthly_depreciation":monthly.quantize(Q2),"months_charged":charged,"accumulated_depreciation":accumulated,
+        "book_value":book,"last_month":end.strftime('%Y-%m'),"status":status,
+        "created_by":r[10],"created_at":r[11],"updated_by":r[12],"updated_at":r[13]}
+
+def _validate_investment(d):
+    if d.salvage_value>=d.amount: raise HTTPException(422,"El valor de reventa debe ser menor que el valor de compra")
+    if d.purchase_date>local_today(): raise HTTPException(422,"La fecha de compra no puede estar en el futuro")
+
+@app.get("/investments")
+def list_investments(request: Request):
+    user_from(request)
+    today=local_today()
+    with psycopg.connect(DB) as c:
+        rows=c.execute(f"SELECT {INV_COLUMNS} {INV_FROM} ORDER BY i.retired_date IS NOT NULL, i.purchase_date DESC, i.id DESC").fetchall()
+        items=[_investment_dict(r,today) for r in rows]
+        this_month=_depreciation_for_month(c,today)
+        first=min((date.fromisoformat(i["purchase_date"]) for i in items),default=None)
+        recovery=None
+        if first:
+            # Recuperación: margen de ventas acumulado desde la primera inversión frente a lo invertido.
+            m=c.execute("""SELECT COALESCE(SUM(subtotal-discount-cost_total),0) FROM sales
+                WHERE status='completed' AND sale_date>=%s""",(first.replace(day=1),)).fetchone()[0]
+            last3=c.execute("""SELECT COALESCE(SUM(subtotal-discount-cost_total),0) FROM sales
+                WHERE status='completed' AND sale_date>=%s AND sale_date<%s""",(_shift_month(today.replace(day=1),-3),today.replace(day=1))).fetchone()[0]
+            invested=sum((i["amount"] for i in items),Decimal(0))
+            avg=(last3/3).quantize(Q2)
+            pending=max(Decimal(0),invested-m)
+            recovery={"since":first.replace(day=1).strftime('%Y-%m'),"invested":invested,"margin_since":m,
+                      "recovered_pct":min(Decimal(100),(m/invested*100)).quantize(Decimal('0.1')) if invested and m>0 else Decimal(0),
+                      "pending":pending,"avg_monthly_margin":avg,
+                      "months_to_recover":(pending/avg).quantize(Decimal('0.1')) if pending>0 and avg>0 else (Decimal(0) if pending==0 else None)}
+    active=[i for i in items if i["status"]=="active"]
+    return {"items":items,"categories":INVESTMENT_CATEGORIES,
+        "summary":{"count":len(items),"active":len(active),"invested":sum((i["amount"] for i in items),Decimal(0)),
+                   "book_value":sum((i["book_value"] for i in items if i["status"]!="retired"),Decimal(0)),
+                   "monthly_depreciation":this_month,"month":today.strftime('%Y-%m')},
+        "recovery":recovery}
+
+@app.post("/investments", status_code=201)
+def create_investment(d: InvestmentInput, request: Request):
+    u=require_admin(request); _validate_investment(d)
+    with psycopg.connect(DB) as c:
+        iid=c.execute("""INSERT INTO investments(name,category,purchase_date,amount,salvage_value,useful_life_months,note,created_by,updated_by)
+            VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",(d.name.strip(),d.category,d.purchase_date,d.amount,d.salvage_value,
+            d.useful_life_months,d.note.strip(),u['id'],u['id'])).fetchone()[0]
+        r=c.execute(f"SELECT {INV_COLUMNS} {INV_FROM} WHERE i.id=%s",(iid,)).fetchone()
+    return _investment_dict(r,local_today())
+
+@app.patch("/investments/{inv_id}")
+def update_investment(inv_id: int, d: InvestmentInput, request: Request):
+    """Corrige los datos. Las órdenes ya creadas conservan su coste; solo cambian las siguientes."""
+    u=require_admin(request); _validate_investment(d)
+    with psycopg.connect(DB) as c:
+        cur=c.execute("SELECT retired_date FROM investments WHERE id=%s FOR UPDATE",(inv_id,)).fetchone()
+        if not cur: raise HTTPException(404,"Inversión no encontrada")
+        if cur[0] and cur[0]<d.purchase_date: raise HTTPException(422,"La fecha de compra no puede ser posterior a la fecha de baja")
+        c.execute("""UPDATE investments SET name=%s,category=%s,purchase_date=%s,amount=%s,salvage_value=%s,useful_life_months=%s,
+            note=%s,updated_by=%s,updated_at=NOW() WHERE id=%s""",(d.name.strip(),d.category,d.purchase_date,d.amount,d.salvage_value,
+            d.useful_life_months,d.note.strip(),u['id'],inv_id))
+        r=c.execute(f"SELECT {INV_COLUMNS} {INV_FROM} WHERE i.id=%s",(inv_id,)).fetchone()
+    return _investment_dict(r,local_today())
+
+@app.post("/investments/{inv_id}/retire")
+def retire_investment(inv_id: int, d: InvestmentRetire, request: Request):
+    """Da de baja un equipo (vendido, dañado, registrado por error). Deja de depreciarse desde el mes de baja."""
+    u=require_admin(request)
+    if d.retired_date>local_today(): raise HTTPException(422,"La fecha de baja no puede estar en el futuro")
+    with psycopg.connect(DB) as c:
+        cur=c.execute("SELECT purchase_date,retired_date FROM investments WHERE id=%s FOR UPDATE",(inv_id,)).fetchone()
+        if not cur: raise HTTPException(404,"Inversión no encontrada")
+        if cur[1]: raise HTTPException(409,"Esta inversión ya está dada de baja")
+        if d.retired_date<cur[0]: raise HTTPException(422,"La fecha de baja no puede ser anterior a la compra")
+        c.execute("UPDATE investments SET retired_date=%s,retire_reason=%s,updated_by=%s,updated_at=NOW() WHERE id=%s",
+                  (d.retired_date,d.reason.strip(),u['id'],inv_id))
+        r=c.execute(f"SELECT {INV_COLUMNS} {INV_FROM} WHERE i.id=%s",(inv_id,)).fetchone()
+    return {**_investment_dict(r,local_today()),"message":"Inversión dada de baja. Deja de sumar al gasto mensual desde ese mes."}

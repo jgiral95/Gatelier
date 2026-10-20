@@ -90,7 +90,7 @@ select.quiet{font-weight:500;padding-right:12px}
 .panelhead p{font-size:13px;color:var(--muted);margin:0}
 .search,.filter,.panelhead select{min-height:40px;border:1px solid var(--line);border-radius:999px;background:var(--white);padding:0 14px;font-size:13px;min-width:0}
 .search{min-width:min(240px,100%)}
-.tablewrap{overflow-x:auto}
+.tablewrap{overflow-x:auto;position:relative}
 table{width:100%;border-collapse:collapse;text-align:left;white-space:nowrap}
 #orderRows td,#recipeRows td{white-space:normal;min-width:110px}
 #orderRows td:nth-child(4){min-width:230px}
@@ -119,6 +119,7 @@ td .actions{flex-wrap:nowrap}
 .type-pill.work_in_progress{background:var(--info-soft);color:var(--info)}
 .type-pill.finished_product{background:#344a4214;color:var(--forest)}
 .type-pill.to_classify{background:var(--warn-soft);color:var(--warn)}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .diff-up{color:var(--danger)}.diff-down{color:#2f6b52}
 
 /* ---------- Formularios ---------- */
@@ -180,14 +181,18 @@ td .actions{flex-wrap:nowrap}
 
 /* ---------- Teléfono ---------- */
 @media (max-width:600px){
-  .app{grid-template-columns:1fr;min-height:0}
+  .app{grid-template-columns:minmax(0,1fr);min-height:0}
+  .side{min-width:0}
   .side{position:sticky;top:0;z-index:15;height:auto;flex-direction:row;align-items:center;justify-content:space-between;gap:8px;padding:10px max(14px,env(safe-area-inset-right,0px)) 10px max(14px,env(safe-area-inset-left,0px));overflow:visible}
   .side>div:first-child{flex:none;width:auto}
-  .side .brand-lockup{width:84px;margin:0}
+  .side .brand-lockup{width:72px;margin:0}
   .side>div:nth-child(2){flex:1;min-width:0}
   .nav{display:flex;justify-content:flex-end;gap:2px}
-  .side>div:nth-child(2){display:flex;justify-content:flex-end}
-  .navlink,.nav button{width:40px;min-height:40px}
+  .side>div:nth-child(2){display:flex}
+  .side .nav{margin-left:auto}
+  .side>div:nth-child(2){overflow-x:auto;scrollbar-width:none}
+  .nav{flex-wrap:nowrap}
+  .navlink,.nav button{width:36px;min-height:38px;flex:none}
   .nav button:disabled{display:none}
   .bottom{margin:0;border:0;padding:0;flex-direction:row;align-items:center}
   .user{display:none}
