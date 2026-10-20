@@ -380,7 +380,7 @@
     document.getElementById('cards').innerHTML=SIZES.map((s,i)=>{
       const link=waLink(sizeMsg(s));
       const btn=link?`<a class="btn" href="${link}" target="_blank" rel="noopener noreferrer">Pedir por WhatsApp</a>`:`<span class="btn disabled" aria-disabled="true">WhatsApp pronto</span>`;
-      return `<article class="card"><div class="card-photo"><img src="/assets/products/${s.image}" alt="${esc(s.alt)}" loading="${i<3?'eager':'lazy'}" decoding="async"></div><div class="card-body"><h3>Talla ${s.code} · ${esc(s.color)}</h3><span class="card-dims">${s.w} × ${s.h} cm</span><div class="card-foot"><span class="card-price">${money(s.price)}</span>${btn}</div></div></article>`;
+      return `<article class="card"><div class="card-photo"><img src="/assets/products/${s.image}" alt="${esc(s.alt)}" loading="${i<3?'eager':'lazy'}" decoding="async"></div><div class="card-body"><h3>Talla ${s.code}</h3><span class="card-dims">${s.w} × ${s.h} cm</span><div class="card-foot"><span class="card-price">${money(s.price)}</span>${btn}</div></div></article>`;
     }).join('');
 
     // Disponibilidad desde el inventario (solo se muestra si hay referencias públicas)
