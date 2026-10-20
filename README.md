@@ -38,6 +38,13 @@ Los botones de las piezas abren WhatsApp para consultar tamaño, precio y dispon
 - **Cierre de órdenes.** Al completar una orden se registran las unidades buenas y defectuosas, las horas reales y el material realmente consumido (por defecto, lo previsto). Solo las unidades buenas entran al inventario y absorben el coste real. El coste previsto se conserva por separado para comparar.
 - **Reapertura.** Una orden completada puede reabrirse: los materiales vuelven al inventario y se retiran las unidades producidas, con movimientos «Reversión de producción» en el historial. Se bloquea si esas unidades ya no están en inventario.
 - **Ventas.** En `/admin/ventas.html` se registran ventas por WhatsApp, Instagram o en persona, pagadas en efectivo o por transferencia, con cliente, contacto, descuento y envío cobrado. Solo se venden productos terminados. Al guardar se descuenta el stock en una sola transacción, sin permitir negativos, y cada línea guarda el coste unitario de ese día, así el margen histórico no cambia si después cambian los costes. El ingreso neto es productos menos descuento; el envío se cobra aparte y no cuenta como ingreso por productos. Un envío repetido del mismo formulario no duplica la venta. Solo un administrador puede anular una venta: las piezas vuelven al inventario con un movimiento «Venta anulada» y la venta se conserva con el motivo.
+- **Costes.** `/admin/costes.html` muestra la rentabilidad de un mes solo con datos registrados:
+  - ingreso neto, coste de lo vendido (el coste guardado en cada venta) y margen;
+  - rentabilidad por producto, con el descuento de cada venta repartido entre sus productos según su valor;
+  - producción completada en el mes (fecha de cierre en hora de Colombia) separada en materia prima, material recuperado, mano de obra y gastos por lote, por unidad y mensuales, frente a lo previsto;
+  - gasto mensual configurado frente a lo que realmente se repartió en piezas producidas;
+  - margen de los últimos seis meses.
+  El envío cobrado no cuenta como ingreso porque no se registra su coste.
 - **Zona horaria.** La fecha por defecto de una venta usa `APP_TIMEZONE` (por defecto `America/Bogota`); si la imagen no trae datos de zonas horarias, se usa UTC−5.
 - **Migración.** Al arrancar, la API añade las columnas nuevas de producción sin borrar datos y registra las órdenes ya completadas como «real = previsto», que es lo que ocurrió con la versión anterior. Es idempotente.
 
@@ -50,7 +57,7 @@ pip install -r backend/requirements.txt pytest httpx
 TEST_DATABASE_URL=postgresql://USUARIO@localhost:5432/gatelier_test python -m pytest backend/tests
 ```
 
-Cubren ventas (stock, coste histórico, descuentos, doble envío, anulación y resumen del mes), permisos, roles, último administrador, cierre con consumos reales y defectuosas, órdenes por encargo, cierre doble, reapertura y su bloqueo, cancelación y que el catálogo público no exponga costes.
+Cubren el informe de costes con un escenario de cifras conocidas, ventas (stock, coste histórico, descuentos, doble envío, anulación y resumen del mes), permisos, roles, último administrador, cierre con consumos reales y defectuosas, órdenes por encargo, cierre doble, reapertura y su bloqueo, cancelación y que el catálogo público no exponga costes.
 
 ## Ejecución local
 

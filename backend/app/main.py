@@ -956,3 +956,112 @@ def void_sale(sale_id: int, d: SaleVoid, request: Request):
                 VALUES(%s,%s,'sale_void',%s,%s,%s,%s,%s,%s)""",(pid,u['id'],q,newq,f"Anulación de venta #{sale_id}: {d.reason.strip()}",p[1],newcost,sale_id))
         c.execute("UPDATE sales SET status='voided',voided_by=%s,voided_at=NOW(),void_reason=%s WHERE id=%s",(u['id'],d.reason.strip(),sale_id))
     return {"id":sale_id,"status":"voided","message":f"Venta #{sale_id} anulada. Las piezas volvieron al inventario."}
+
+
+# ------------------------------- COSTES -------------------------------
+def _month_range(month: str):
+    start=_month_date(month)
+    end=date(start.year+(start.month==12), start.month%12+1, 1)
+    return start,end
+
+def _shift_month(d: date, n: int) -> date:
+    y,m=divmod(d.year*12+d.month-1+n,12)
+    return date(y,m+1,1)
+
+LOCAL_TZ_NAME=os.environ.get("APP_TIMEZONE","America/Bogota")
+Q2=Decimal('0.01')
+
+@app.get("/costs/report")
+def costs_report(request: Request, month: str = Query(..., pattern=r"^\d{4}-\d{2}$")):
+    """Rentabilidad del mes con datos registrados: ventas vigentes, órdenes completadas y gasto mensual."""
+    user_from(request)
+    start,end=_month_range(month)
+    with psycopg.connect(DB) as c:
+        # Ventas por producto. El descuento de cada venta se reparte entre sus líneas según su valor.
+        rows=c.execute("""SELECT p.id,p.sku,p.name,p.unit,p.sale_price,
+                SUM(si.quantity),SUM(si.line_total),
+                SUM(CASE WHEN s.subtotal>0 THEN s.discount*si.line_total/s.subtotal ELSE 0 END),
+                SUM(si.line_cost)
+            FROM sale_items si JOIN sales s ON s.id=si.sale_id JOIN inventory_products p ON p.id=si.product_id
+            WHERE s.status='completed' AND s.sale_date>=%s AND s.sale_date<%s
+            GROUP BY p.id,p.sku,p.name,p.unit,p.sale_price ORDER BY SUM(si.line_total) DESC""",(start,end)).fetchall()
+        products=[]
+        for r in rows:
+            gross=r[6]; disc=(r[7] or Decimal(0)).quantize(Q2); net=gross-disc; cost=r[8]
+            products.append({"product_id":r[0],"sku":r[1],"name":r[2],"unit":r[3],"list_price":r[4],"units":r[5],
+                "gross":gross,"discount":disc,"net_revenue":net,"cost":cost,"margin":net-cost,
+                "avg_price":(net/r[5]).quantize(Q2) if r[5] else None,
+                "unit_cost":(cost/r[5]).quantize(Q2) if r[5] else None})
+        sales_agg=c.execute("""SELECT COUNT(*),COALESCE(SUM(subtotal-discount),0),COALESCE(SUM(discount),0),
+                COALESCE(SUM(shipping),0),COALESCE(SUM(cost_total),0)
+            FROM sales WHERE status='completed' AND sale_date>=%s AND sale_date<%s""",(start,end)).fetchone()
+
+        # Producción completada en el mes (fecha local de cierre).
+        orders=c.execute("""SELECT o.id,p.id,p.sku,p.name,p.unit,o.destination_mode,o.planned_quantity,o.good_quantity,o.defective_quantity,
+                o.actual_labor_hours,o.actual_material_cost,o.actual_labor_cost,o.actual_overhead_cost,o.actual_total_cost,o.actual_unit_cost,
+                o.total_cost,o.unit_cost,o.batch_overhead,o.unit_overhead_total,o.monthly_overhead_total,o.labor_hours,o.labor_cost,o.material_cost,p.sale_price
+            FROM production_orders o JOIN inventory_products p ON p.id=o.finished_product_id
+            WHERE o.status='completed' AND (o.completed_at AT TIME ZONE %s)::date>=%s AND (o.completed_at AT TIME ZONE %s)::date<%s
+            ORDER BY o.completed_at""",(LOCAL_TZ_NAME,start,LOCAL_TZ_NAME,end)).fetchall()
+        split={}
+        if orders:
+            for oid,itype,amount in c.execute("""SELECT om.order_id,p.item_type,SUM(om.consumed_quantity*COALESCE(om.actual_unit_cost,om.unit_cost_snapshot))
+                    FROM production_order_materials om JOIN inventory_products p ON p.id=om.product_id
+                    WHERE om.order_id=ANY(%s) GROUP BY om.order_id,p.item_type""",([o[0] for o in orders],)).fetchall():
+                split.setdefault(oid,{})[itype]=amount
+        prod={"orders":len(orders),"good_units":Decimal(0),"defective_units":Decimal(0),"labor_hours":Decimal(0),
+              "raw_material":Decimal(0),"recovered_material":Decimal(0),"other_material":Decimal(0),"labor":Decimal(0),
+              "batch_overhead":Decimal(0),"unit_overhead":Decimal(0),"monthly_overhead":Decimal(0),"total":Decimal(0),"planned_total":Decimal(0)}
+        by_prod={}
+        for o in orders:
+            processed=(o[7] or 0)+(o[8] or 0); ratio=processed/o[6] if o[6] else Decimal(0)
+            s=split.get(o[0],{})
+            raw=s.get("raw_material",Decimal(0)); rec=s.get("recovered_material",Decimal(0))
+            other=(o[10] or Decimal(0))-raw-rec
+            unit_oh=o[18]*ratio; month_oh=o[19]*ratio
+            prod["good_units"]+=o[7] or 0; prod["defective_units"]+=o[8] or 0; prod["labor_hours"]+=o[9] or 0
+            prod["raw_material"]+=raw; prod["recovered_material"]+=rec; prod["other_material"]+=other
+            prod["labor"]+=o[11] or 0; prod["batch_overhead"]+=o[17]; prod["unit_overhead"]+=unit_oh; prod["monthly_overhead"]+=month_oh
+            prod["total"]+=o[13] or 0; prod["planned_total"]+=o[15]
+            b=by_prod.setdefault(o[1],{"product_id":o[1],"sku":o[2],"name":o[3],"unit":o[4],"sale_price":o[23],"orders":0,"good_units":Decimal(0),
+                "defective_units":Decimal(0),"actual_total":Decimal(0),"planned_total":Decimal(0),"planned_units":Decimal(0)})
+            b["orders"]+=1; b["good_units"]+=o[7] or 0; b["defective_units"]+=o[8] or 0
+            b["actual_total"]+=o[13] or 0; b["planned_total"]+=o[15]; b["planned_units"]+=o[6]
+        for k in list(prod):
+            if isinstance(prod[k],Decimal) and k not in ("good_units","defective_units","labor_hours"): prod[k]=prod[k].quantize(Q2)
+        processed_total=prod["good_units"]+prod["defective_units"]
+        prod["defect_rate"]=(prod["defective_units"]/processed_total*100).quantize(Decimal('0.1')) if processed_total else None
+        prod["unit_cost"]=(prod["total"]/prod["good_units"]).quantize(Q2) if prod["good_units"] else None
+        produced=[]
+        for b in by_prod.values():
+            b["actual_unit_cost"]=(b["actual_total"]/b["good_units"]).quantize(Q2) if b["good_units"] else None
+            b["planned_unit_cost"]=(b["planned_total"]/b["planned_units"]).quantize(Q2) if b["planned_units"] else None
+            produced.append(b)
+        produced.sort(key=lambda x:x["actual_total"],reverse=True)
+
+        # Gasto mensual: configurado frente a lo repartido en órdenes completadas imputadas a este mes.
+        oh=c.execute("SELECT amount,planned_units,note FROM production_monthly_overheads WHERE period=%s",(start,)).fetchone()
+        absorbed=c.execute("""SELECT COALESCE(SUM(monthly_overhead_total*(COALESCE(good_quantity,0)+defective_quantity)/planned_quantity),0),
+                COALESCE(SUM(COALESCE(good_quantity,0)+defective_quantity),0)
+            FROM production_orders WHERE status='completed' AND monthly_period=%s""",(start,)).fetchone()
+        overhead={"configured":oh is not None,"amount":oh[0] if oh else Decimal(0),"planned_units":oh[1] if oh else None,
+                  "note":oh[2] if oh else "","absorbed":absorbed[0].quantize(Q2),"units_charged":absorbed[1]}
+        overhead["unabsorbed"]=(overhead["amount"]-overhead["absorbed"]).quantize(Q2) if oh else Decimal(0)
+
+        # Tendencia de los últimos seis meses (incluido el elegido).
+        first=_shift_month(start,-5)
+        trend_rows=c.execute("""SELECT date_trunc('month',sale_date)::date,COUNT(*),SUM(subtotal-discount),SUM(cost_total)
+            FROM sales WHERE status='completed' AND sale_date>=%s AND sale_date<%s GROUP BY 1""",(first,end)).fetchall()
+        tmap={r[0]:r for r in trend_rows}
+        trend=[]
+        for i in range(6):
+            m=_shift_month(first,i); r=tmap.get(m)
+            net=r[2] if r else Decimal(0); cost=r[3] if r else Decimal(0)
+            trend.append({"month":m.strftime('%Y-%m'),"sales":r[1] if r else 0,"net_revenue":net,"cost":cost,"margin":net-cost})
+
+    net=sales_agg[1]; cogs=sales_agg[4]
+    return {"month":month,
+        "sales":{"count":sales_agg[0],"net_revenue":net,"discounts":sales_agg[2],"shipping":sales_agg[3],"cost":cogs,
+                 "margin":net-cogs,"margin_pct":(((net-cogs)/net)*100).quantize(Decimal('0.1')) if net else None,
+                 "units":sum((p["units"] for p in products),Decimal(0))},
+        "products":products,"production":prod,"produced":produced,"overhead":overhead,"trend":trend}
