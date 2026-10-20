@@ -51,6 +51,7 @@ Tipos de artículo conocidos:
 - Producto terminado.
 
 Una referencia/SKU representa una clase de artículo, no una unidad individual serializada.
+- Excepción acordada con el usuario para productos terminados: cada pieza única puede tener una ficha de **unidad** (`product_units`) con código, nombre y dos fotos (cerrada/abierta). Las unidades disponibles nunca pueden superar las existencias de su referencia; ventas, bajas, ajustes y reaperturas deben mantener esa regla.
 - Coste unitario y precio de venta son campos distintos.
 - Unidades discretas como unidad, rollo y paquete solo admiten cantidades enteras; metros, centímetros, kilogramos y gramos pueden admitir decimales.
 - Validar las cantidades tanto en frontend como en backend. No redondear stock automáticamente.

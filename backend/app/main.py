@@ -155,6 +155,30 @@ async def lifespan(app):
             created_by BIGINT REFERENCES app_users(id), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             updated_by BIGINT REFERENCES app_users(id), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             CHECK(salvage_value<amount), CHECK(retired_date IS NULL OR retired_date>=purchase_date))""")
+        # Unidades: cada pieza única de una referencia terminada, con sus propias fotos.
+        c.execute("""CREATE TABLE IF NOT EXISTS product_units(
+            id BIGSERIAL PRIMARY KEY, product_id BIGINT NOT NULL REFERENCES inventory_products(id),
+            code VARCHAR(100) UNIQUE NOT NULL, name VARCHAR(120) NOT NULL DEFAULT '',
+            status VARCHAR(12) NOT NULL DEFAULT 'available' CHECK(status IN ('available','sold','removed')),
+            sale_id BIGINT REFERENCES sales(id), removed_reason TEXT NOT NULL DEFAULT '',
+            created_by BIGINT REFERENCES app_users(id), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())""")
+        c.execute("CREATE INDEX IF NOT EXISTS product_units_product_idx ON product_units(product_id,status)")
+        c.execute("""CREATE TABLE IF NOT EXISTS unit_photos(
+            unit_id BIGINT NOT NULL REFERENCES product_units(id) ON DELETE CASCADE,
+            kind VARCHAR(10) NOT NULL CHECK(kind IN ('closed','open')),
+            content_type VARCHAR(20) NOT NULL, data BYTEA NOT NULL,
+            updated_by BIGINT REFERENCES app_users(id), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY(unit_id,kind))""")
+        # Las fotos que se subieron a una referencia pasan a una primera unidad de esa referencia (una sola vez).
+        for pid,sku,qty in c.execute("""SELECT p.id,p.sku,p.quantity FROM inventory_products p
+                WHERE EXISTS(SELECT 1 FROM product_photos ph WHERE ph.product_id=p.id)""").fetchall():
+            if qty>=1 and not c.execute("SELECT 1 FROM product_units WHERE product_id=%s AND status='available'",(pid,)).fetchone():
+                uid=c.execute("INSERT INTO product_units(product_id,code) VALUES(%s,%s) ON CONFLICT(code) DO NOTHING RETURNING id",(pid,f"{sku}-001")).fetchone()
+                if uid:
+                    c.execute("""INSERT INTO unit_photos(unit_id,kind,content_type,data,updated_by,updated_at)
+                        SELECT %s,kind,content_type,data,updated_by,updated_at FROM product_photos WHERE product_id=%s""",(uid[0],pid))
+                    c.execute("DELETE FROM product_photos WHERE product_id=%s",(pid,))
         # Órdenes completadas antes de esta versión consumieron exactamente lo previsto: se registran así una sola vez.
         c.execute("""UPDATE production_orders SET good_quantity=planned_quantity, actual_labor_hours=labor_hours,
             actual_material_cost=material_cost, actual_labor_cost=labor_cost,
@@ -196,13 +220,19 @@ ITEM_TYPE_LABELS = {
 SIZE_CODES=("XS","S","M","L","XL")
 PHOTO_KINDS={"closed":"Cerrado","open":"Abierto"}
 PCOLS="""id,sku,name,item_type,category,unit,quantity,min_stock,unit_cost,sale_price,notes,updated_at,size_code,
-    (SELECT COALESCE(json_object_agg(ph.kind,floor(extract(epoch FROM ph.updated_at))::bigint),'{}'::json)
-     FROM product_photos ph WHERE ph.product_id=inventory_products.id)"""
-def photo_urls(pid, versions):
-    return {k:f"/api/public/photos/{pid}/{k}?v={v}" for k,v in (versions or {}).items()}
+    (SELECT COUNT(*) FROM product_units pu WHERE pu.product_id=inventory_products.id AND pu.status='available'),
+    (SELECT COUNT(*) FROM product_units pu WHERE pu.product_id=inventory_products.id AND pu.status='available'
+        AND EXISTS(SELECT 1 FROM unit_photos up WHERE up.unit_id=pu.id AND up.kind='closed')),
+    (SELECT pu.id::text||':'||floor(extract(epoch FROM up.updated_at))::bigint FROM product_units pu JOIN unit_photos up ON up.unit_id=pu.id
+        WHERE pu.product_id=inventory_products.id AND pu.status='available' AND up.kind='closed' ORDER BY pu.id LIMIT 1)"""
+def unit_photo_urls(uid, versions):
+    return {k:f"/api/public/unit-photos/{uid}/{k}?v={v}" for k,v in (versions or {}).items()}
 def pack(r):
+    thumb=None
+    if r[15]:
+        uid,ver=r[15].split(':'); thumb=f"/api/public/unit-photos/{uid}/closed?v={ver}"
     return {"id":r[0],"sku":r[1],"name":r[2],"item_type":r[3],"category":r[4],"unit":r[5],"quantity":r[6],"min_stock":r[7],"unit_cost":r[8],"sale_price":r[9],"notes":r[10],"updated_at":r[11],
-            "size_code":r[12],"photos":photo_urls(r[0],r[13])}
+            "size_code":r[12],"units_available":r[13],"units_with_photo":r[14],"thumb":thumb}
 
 DISCRETE_UNITS={"unidad","rollo","paquete"}
 def is_discrete_unit(unit:str)->bool:
@@ -251,18 +281,26 @@ def health():
         return {"status":"ok","database":"connected"}
     except Exception:return JSONResponse(status_code=503,content={"status":"error","database":"unavailable"})
 
+UNIT_PHOTOS_JSON="""(SELECT COALESCE(json_object_agg(up.kind,floor(extract(epoch FROM up.updated_at))::bigint),'{}'::json)
+    FROM unit_photos up WHERE up.unit_id=pu.id)"""
+
 @app.get("/public/catalog")
 def public_catalog():
-    """Public storefront catalog; never returns internal notes, costs, or exact stock."""
+    """Catálogo de la tienda: referencias terminadas y sus piezas únicas disponibles con foto.
+    Nunca devuelve costes, notas internas ni cantidades exactas."""
     with psycopg.connect(DB) as c:
-        rows=c.execute("""SELECT id,sku,name,unit,sale_price,quantity>0,size_code,
-                (SELECT COALESCE(json_object_agg(ph.kind,floor(extract(epoch FROM ph.updated_at))::bigint),'{}'::json)
-                 FROM product_photos ph WHERE ph.product_id=inventory_products.id)
-            FROM inventory_products
-            WHERE is_active=TRUE AND item_type='finished_product' AND sale_price IS NOT NULL
-            ORDER BY name,id""").fetchall()
+        rows=c.execute("""SELECT id,sku,name,unit,sale_price,quantity>0,size_code FROM inventory_products
+            WHERE is_active=TRUE AND item_type='finished_product' AND sale_price IS NOT NULL ORDER BY name,id""").fetchall()
+        units=c.execute(f"""SELECT pu.product_id,pu.id,pu.code,pu.name,{UNIT_PHOTOS_JSON} FROM product_units pu
+            JOIN inventory_products p ON p.id=pu.product_id
+            WHERE pu.status='available' AND p.is_active AND p.item_type='finished_product' AND p.quantity>0
+              AND EXISTS(SELECT 1 FROM unit_photos up WHERE up.unit_id=pu.id AND up.kind='closed')
+            ORDER BY pu.id""").fetchall()
+    styles={}
+    for pid,uid,code,name,ph in units:
+        styles.setdefault(pid,[]).append({"id":uid,"ref":code,"name":name,"photos":unit_photo_urls(uid,ph)})
     return {"items":[{"id":r[0],"ref":r[1],"name":r[2],"unit":r[3],"sale_price":r[4],"available":r[5],"size":r[6],
-                      "photos":photo_urls(r[0],r[7])} for r in rows]}
+                      "styles":styles.get(r[0],[])} for r in rows]}
 
 MAX_PHOTO_BYTES=1_500_000
 def _image_type(data: bytes) -> Optional[str]:
@@ -271,40 +309,133 @@ def _image_type(data: bytes) -> Optional[str]:
     if data[:4]==b"RIFF" and data[8:12]==b"WEBP": return "image/webp"
     return None
 
-@app.get("/public/photos/{pid}/{kind}")
-def public_photo(pid: int, kind: Literal["closed","open"]):
+@app.get("/public/unit-photos/{uid}/{kind}")
+def public_unit_photo(uid: int, kind: Literal["closed","open"]):
     with psycopg.connect(DB) as c:
-        r=c.execute("""SELECT ph.content_type,ph.data FROM product_photos ph JOIN inventory_products p ON p.id=ph.product_id
-            WHERE ph.product_id=%s AND ph.kind=%s AND p.is_active AND p.item_type='finished_product'""",(pid,kind)).fetchone()
+        r=c.execute("""SELECT up.content_type,up.data FROM unit_photos up JOIN product_units pu ON pu.id=up.unit_id
+            JOIN inventory_products p ON p.id=pu.product_id
+            WHERE up.unit_id=%s AND up.kind=%s AND p.is_active AND p.item_type='finished_product'""",(uid,kind)).fetchone()
     if not r: raise HTTPException(404,"Foto no encontrada")
     return Response(content=bytes(r[1]),media_type=r[0],headers={"Cache-Control":"public, max-age=86400"})
 
-@app.post("/inventory/{pid}/photos/{kind}")
-async def upload_photo(pid: int, kind: Literal["closed","open"], request: Request, file: UploadFile = File(...)):
-    """Guarda la foto del forro cerrado o abierto. Reemplaza la anterior del mismo tipo."""
+# ------------------------------- UNIDADES -------------------------------
+UNIT_STATUS={"available":"Disponible","sold":"Vendida","removed":"Dada de baja"}
+class UnitCreate(BaseModel):
+    name: str = Field(default="", max_length=120)
+class UnitUpdate(BaseModel):
+    name: str = Field(default="", max_length=120)
+class UnitRemove(BaseModel):
+    reason: str = Field(min_length=3, max_length=500)
+
+def _units_fit(c, pid, new_quantity, available_after=None):
+    """Nunca puede haber más unidades disponibles identificadas que existencias."""
+    n=available_after if available_after is not None else c.execute(
+        "SELECT COUNT(*) FROM product_units WHERE product_id=%s AND status='available'",(pid,)).fetchone()[0]
+    if n>new_quantity:
+        raise HTTPException(409,f"Quedarían {n} unidad(es) con ficha disponible pero solo {new_quantity} en existencias. Indica qué unidades salen (véndelas, dalas de baja o elimina sus fichas) antes de bajar el inventario.")
+
+def _unit_rows(c, pid=None, uid=None):
+    where="pu.product_id=%s" if pid is not None else "pu.id=%s"
+    return c.execute(f"""SELECT pu.id,pu.product_id,pu.code,pu.name,pu.status,pu.sale_id,pu.removed_reason,pu.created_at,cu.username,{UNIT_PHOTOS_JSON}
+        FROM product_units pu LEFT JOIN app_users cu ON cu.id=pu.created_by WHERE {where}
+        ORDER BY (pu.status='available') DESC, pu.id DESC""",(pid if pid is not None else uid,)).fetchall()
+
+def _unit_dict(r):
+    return {"id":r[0],"product_id":r[1],"code":r[2],"name":r[3],"status":r[4],"status_label":UNIT_STATUS.get(r[4],r[4]),
+            "sale_id":r[5],"removed_reason":r[6],"created_at":r[7],"created_by":r[8],"photos":unit_photo_urls(r[0],r[9])}
+
+def _units_payload(c, pid):
+    p=c.execute(f"SELECT {PCOLS} FROM inventory_products WHERE id=%s",(pid,)).fetchone()
+    return {"product":pack(p),"units":[_unit_dict(r) for r in _unit_rows(c,pid=pid)]}
+
+def _lock_finished(c, pid):
+    p=c.execute("SELECT id,sku,quantity,unit,item_type,is_active FROM inventory_products WHERE id=%s FOR UPDATE",(pid,)).fetchone()
+    if not p or not p[5]: raise HTTPException(404,"Producto no encontrado")
+    if p[4]!='finished_product': raise HTTPException(422,"Solo los productos terminados tienen unidades con fotos")
+    return p
+
+@app.get("/inventory/{pid}/units")
+def list_units(pid: int, request: Request):
+    user_from(request)
+    with psycopg.connect(DB) as c:
+        if not c.execute("SELECT 1 FROM inventory_products WHERE id=%s AND is_active",(pid,)).fetchone(): raise HTTPException(404,"Producto no encontrado")
+        return _units_payload(c,pid)
+
+@app.post("/inventory/{pid}/units", status_code=201)
+def create_unit(pid: int, d: UnitCreate, request: Request):
+    """Crea la ficha de una pieza que ya está en existencias (por producción o entrada)."""
+    u=user_from(request)
+    with psycopg.connect(DB) as c:
+        p=_lock_finished(c,pid)
+        if not is_discrete_unit(p[3]): raise HTTPException(422,"Las unidades individuales solo aplican a productos que se cuentan por unidad")
+        avail=c.execute("SELECT COUNT(*) FROM product_units WHERE product_id=%s AND status='available'",(pid,)).fetchone()[0]
+        if avail+1>p[2]:
+            raise HTTPException(409,f"Todas las existencias ({p[2]}) ya tienen ficha. Registra primero la producción o la entrada de la nueva pieza.")
+        n=c.execute("SELECT COUNT(*) FROM product_units WHERE product_id=%s",(pid,)).fetchone()[0]+1
+        while c.execute("SELECT 1 FROM product_units WHERE code=%s",(f"{p[1]}-{n:03d}",)).fetchone(): n+=1
+        c.execute("INSERT INTO product_units(product_id,code,name,created_by) VALUES(%s,%s,%s,%s)",(pid,f"{p[1]}-{n:03d}",d.name.strip(),u['id']))
+        return {**_units_payload(c,pid),"message":f"Unidad {p[1]}-{n:03d} creada. Súbele sus dos fotos."}
+
+def _lock_unit(c, uid):
+    r=c.execute("SELECT id,product_id,code,status FROM product_units WHERE id=%s FOR UPDATE",(uid,)).fetchone()
+    if not r: raise HTTPException(404,"Unidad no encontrada")
+    return r
+
+@app.patch("/units/{uid}")
+def update_unit(uid: int, d: UnitUpdate, request: Request):
+    user_from(request)
+    with psycopg.connect(DB) as c:
+        r=_lock_unit(c,uid)
+        c.execute("UPDATE product_units SET name=%s,updated_at=NOW() WHERE id=%s",(d.name.strip(),uid))
+        return {**_units_payload(c,r[1]),"message":"Unidad actualizada"}
+
+@app.delete("/units/{uid}")
+def delete_unit(uid: int, request: Request):
+    """Elimina una ficha creada por error. La pieza sigue en existencias, solo sin identificar."""
+    user_from(request)
+    with psycopg.connect(DB) as c:
+        r=_lock_unit(c,uid)
+        if r[3]!='available': raise HTTPException(409,"Solo se pueden eliminar fichas de unidades disponibles; las vendidas o dadas de baja se conservan")
+        c.execute("DELETE FROM product_units WHERE id=%s",(uid,))
+        return {**_units_payload(c,r[1]),"message":f"Ficha {r[2]} eliminada. Las existencias no cambian."}
+
+@app.post("/units/{uid}/remove")
+def remove_unit(uid: int, d: UnitRemove, request: Request):
+    """Saca la pieza del inventario (dañada, regalada, perdida) con un movimiento trazable."""
+    u=user_from(request)
+    with psycopg.connect(DB) as c:
+        r=_lock_unit(c,uid)
+        if r[3]!='available': raise HTTPException(409,"Esta unidad ya no está disponible")
+        p=c.execute("SELECT quantity,unit_cost FROM inventory_products WHERE id=%s FOR UPDATE",(r[1],)).fetchone()
+        if p[0]<1: raise HTTPException(409,"No hay existencias para descontar")
+        newq=p[0]-1
+        c.execute("UPDATE inventory_products SET quantity=%s,updated_at=NOW() WHERE id=%s",(newq,r[1]))
+        c.execute("""INSERT INTO inventory_movements(product_id,user_id,movement_type,quantity_delta,quantity_after,note,unit_cost_before,unit_cost_after)
+            VALUES(%s,%s,'remove',-1,%s,%s,%s,%s)""",(r[1],u['id'],newq,f"Unidad {r[2]} dada de baja: {d.reason.strip()}",p[1],p[1]))
+        c.execute("UPDATE product_units SET status='removed',removed_reason=%s,updated_at=NOW() WHERE id=%s",(d.reason.strip(),uid))
+        return {**_units_payload(c,r[1]),"message":f"Unidad {r[2]} dada de baja y descontada del inventario"}
+
+@app.post("/units/{uid}/photos/{kind}")
+async def upload_unit_photo(uid: int, kind: Literal["closed","open"], request: Request, file: UploadFile = File(...)):
     u=user_from(request)
     data=await file.read(MAX_PHOTO_BYTES+1)
     if len(data)>MAX_PHOTO_BYTES: raise HTTPException(413,"La foto pesa demasiado. Usa una de menos de 1,5 MB.")
     ctype=_image_type(data)
     if not ctype: raise HTTPException(422,"El archivo no es una imagen JPG, PNG o WebP")
     with psycopg.connect(DB) as c:
-        p=c.execute("SELECT item_type FROM inventory_products WHERE id=%s AND is_active",(pid,)).fetchone()
-        if not p: raise HTTPException(404,"Producto no encontrado")
-        if p[0]!='finished_product': raise HTTPException(422,"Solo los productos terminados llevan fotos para la tienda")
-        c.execute("""INSERT INTO product_photos(product_id,kind,content_type,data,updated_by,updated_at) VALUES(%s,%s,%s,%s,%s,NOW())
-            ON CONFLICT(product_id,kind) DO UPDATE SET content_type=EXCLUDED.content_type,data=EXCLUDED.data,updated_by=EXCLUDED.updated_by,updated_at=NOW()""",
-            (pid,kind,ctype,data,u['id']))
-        out=c.execute(f"SELECT {PCOLS} FROM inventory_products WHERE id=%s",(pid,)).fetchone()
-    return {**pack(out),"message":f"Foto «{PHOTO_KINDS[kind]}» guardada"}
+        r=_lock_unit(c,uid)
+        c.execute("""INSERT INTO unit_photos(unit_id,kind,content_type,data,updated_by,updated_at) VALUES(%s,%s,%s,%s,%s,NOW())
+            ON CONFLICT(unit_id,kind) DO UPDATE SET content_type=EXCLUDED.content_type,data=EXCLUDED.data,updated_by=EXCLUDED.updated_by,updated_at=NOW()""",
+            (uid,kind,ctype,data,u['id']))
+        return {**_units_payload(c,r[1]),"message":f"Foto «{PHOTO_KINDS[kind]}» de {r[2]} guardada"}
 
-@app.delete("/inventory/{pid}/photos/{kind}")
-def delete_photo(pid: int, kind: Literal["closed","open"], request: Request):
+@app.delete("/units/{uid}/photos/{kind}")
+def delete_unit_photo(uid: int, kind: Literal["closed","open"], request: Request):
     user_from(request)
     with psycopg.connect(DB) as c:
-        if not c.execute("DELETE FROM product_photos WHERE product_id=%s AND kind=%s",(pid,kind)).rowcount:
-            raise HTTPException(404,"Esa foto no existe")
-        out=c.execute(f"SELECT {PCOLS} FROM inventory_products WHERE id=%s",(pid,)).fetchone()
-    return {**pack(out),"message":f"Foto «{PHOTO_KINDS[kind]}» eliminada"}
+        r=_lock_unit(c,uid)
+        if not c.execute("DELETE FROM unit_photos WHERE unit_id=%s AND kind=%s",(uid,kind)).rowcount: raise HTTPException(404,"Esa foto no existe")
+        return {**_units_payload(c,r[1]),"message":f"Foto «{PHOTO_KINDS[kind]}» de {r[2]} eliminada"}
 
 @app.post("/auth/login")
 def login(response:Response,username:str=Form(...),password:str=Form(...)):
@@ -469,6 +600,8 @@ def update_product(pid:int,d:ProductUpdate,request:Request):
                 linked=c.execute("SELECT 1 FROM production_recipes WHERE finished_product_id=%s AND is_active LIMIT 1",(pid,)).fetchone()
                 if linked:
                     raise HTTPException(409,"Este producto está asociado a una o más fichas de producción. Cambia o desactiva primero esas fichas antes de quitarle el tipo Producto terminado.")
+                if c.execute("SELECT 1 FROM product_units WHERE product_id=%s AND status='available' LIMIT 1",(pid,)).fetchone():
+                    raise HTTPException(409,"Este producto tiene unidades con ficha. Elimina o da de baja esas fichas antes de quitarle el tipo Producto terminado.")
             require_integer_quantity(row[1],d.unit,"La existencia actual")
             out=c.execute(f"""UPDATE inventory_products SET sku=%s,name=%s,item_type=%s,category=%s,unit=%s,
             min_stock=%s,unit_cost=%s,sale_price=%s,notes=%s,size_code=%s,updated_at=NOW() WHERE id=%s
@@ -509,6 +642,7 @@ def adjust(pid:int,d:Adjustment,request:Request):
         require_integer_quantity(d.delta,r[2],"La cantidad del movimiento")
         new=r[1]+delta
         if new<0:raise HTTPException(409,"El ajuste dejaría el inventario en negativo")
+        if delta<0: _units_fit(c,pid,new)
         c.execute("UPDATE inventory_products SET quantity=%s,updated_at=NOW() WHERE id=%s",(new,pid))
         c.execute("""INSERT INTO inventory_movements(product_id,user_id,movement_type,quantity_delta,quantity_after,note)
         VALUES(%s,%s,%s,%s,%s,%s)""",(pid,u["id"],d.direction,delta,new,d.note.strip() or ("Entrada manual" if delta>0 else "Salida manual")))
@@ -835,6 +969,7 @@ def reopen_production_order(order_id: int, request: Request):
             if out[0] < o[4]:
                 raise HTTPException(409,f"No se puede reabrir: el inventario del producto terminado ({out[0]}) es menor que las unidades que produjo esta orden ({o[4]}). Puede que ya se hayan vendido o usado.")
             newq=out[0]-o[4]
+            _units_fit(c,o[1],newq)
             newcost=out[1]
             if newq>0 and o[5] is not None:
                 calc=((out[0]*out[1])-(o[4]*o[5]))/newq
@@ -884,6 +1019,7 @@ class SaleItemInput(BaseModel):
     product_id: int
     quantity: Decimal = Field(gt=0, le=999999)
     unit_price: Decimal = Field(ge=0, le=999999999)
+    unit_ids: List[int] = Field(default_factory=list, max_length=200)
 class SaleCreate(BaseModel):
     sale_date: Optional[date] = None
     channel: Literal["whatsapp","instagram","in_person"]
@@ -919,16 +1055,24 @@ def _sale_items(c, ids):
     out={}
     for r in rows:
         out.setdefault(r[0],[]).append({"product_id":r[1],"sku":r[2],"name":r[3],"unit":r[4],"quantity":r[5],
-            "unit_price":r[6],"line_total":r[7],"unit_cost":r[8],"line_cost":r[9]})
+            "unit_price":r[6],"line_total":r[7],"unit_cost":r[8],"line_cost":r[9],"units":[]})
+    for sid,pid,code,name in c.execute("""SELECT sale_id,product_id,code,name FROM product_units WHERE sale_id=ANY(%s) ORDER BY id""",(list(ids),)).fetchall():
+        for it in out.get(sid,[]):
+            if it["product_id"]==pid: it["units"].append({"code":code,"name":name})
     return out
 
 @app.get("/sales/options")
 def sales_options(request: Request):
     user_from(request)
     with psycopg.connect(DB) as c:
-        rows=c.execute("""SELECT id,sku,name,unit,quantity,sale_price FROM inventory_products
+        rows=c.execute("""SELECT id,sku,name,unit,quantity,sale_price,size_code FROM inventory_products
             WHERE is_active AND item_type='finished_product' ORDER BY name""").fetchall()
-    return {"products":[{"id":r[0],"sku":r[1],"name":r[2],"unit":r[3],"quantity":r[4],"sale_price":r[5]} for r in rows],
+        units={}
+        for pid,uid,code,name,ph in c.execute(f"""SELECT pu.product_id,pu.id,pu.code,pu.name,{UNIT_PHOTOS_JSON} FROM product_units pu
+                WHERE pu.status='available' ORDER BY pu.id""").fetchall():
+            units.setdefault(pid,[]).append({"id":uid,"code":code,"name":name,"photos":unit_photo_urls(uid,ph)})
+    return {"products":[{"id":r[0],"sku":r[1],"name":r[2],"unit":r[3],"quantity":r[4],"sale_price":r[5],"size_code":r[6],
+                         "units":units.get(r[0],[])} for r in rows],
             "channels":SALE_CHANNELS,"payment_methods":PAYMENT_METHODS}
 
 @app.get("/sales")
@@ -997,10 +1141,19 @@ def create_sale(d: SaleCreate, request: Request, response: Response):
             p=prods[it.product_id]
             require_integer_quantity(it.quantity,p[2],f"La cantidad de {p[1]}")
             if p[3]<it.quantity: raise HTTPException(409,f"Stock insuficiente de {p[1]}: disponible {p[3]} {p[2]}, pedido {it.quantity} {p[2]}")
+            if len(set(it.unit_ids))!=len(it.unit_ids): raise HTTPException(422,f"Hay una unidad repetida en {p[1]}")
+            if len(it.unit_ids)>it.quantity: raise HTTPException(422,f"Elegiste más unidades de {p[1]} que la cantidad vendida")
+            for uid in sorted(it.unit_ids):
+                ur=c.execute("SELECT product_id,status,code FROM product_units WHERE id=%s FOR UPDATE",(uid,)).fetchone()
+                if not ur or ur[0]!=it.product_id: raise HTTPException(422,f"La unidad {uid} no pertenece a {p[1]}")
+                if ur[1]!='available': raise HTTPException(409,f"La unidad {ur[2]} ya no está disponible")
+            avail=c.execute("SELECT COUNT(*) FROM product_units WHERE product_id=%s AND status='available'",(it.product_id,)).fetchone()[0]
+            if avail-len(it.unit_ids)>p[3]-it.quantity:
+                raise HTTPException(422,f"{p[1]} tiene piezas con ficha: elige qué unidad(es) se venden")
             line=(it.quantity*it.unit_price).quantize(Decimal('0.01'))
             lcost=(it.quantity*p[4]).quantize(Decimal('0.01'))
             subtotal+=line; cost+=lcost
-            lines.append((it.product_id,it.quantity,it.unit_price,line,p[4],lcost))
+            lines.append((it.product_id,it.quantity,it.unit_price,line,p[4],lcost,it.unit_ids))
         if d.discount>subtotal: raise HTTPException(422,"El descuento no puede ser mayor que el valor de los productos")
         total=(subtotal-d.discount+d.shipping).quantize(Decimal('0.01'))
         try:
@@ -1009,7 +1162,8 @@ def create_sale(d: SaleCreate, request: Request, response: Response):
                 (sale_date,d.channel,d.payment_method,d.customer_name.strip(),d.customer_contact.strip(),subtotal,d.discount,d.shipping,total,cost,d.note.strip(),d.client_ref,u['id'])).fetchone()[0]
         except UniqueViolation:
             raise HTTPException(409,"Esta venta ya se estaba registrando. Actualiza la lista para verla.")
-        for pid,q,price,line,ucost,lcost in lines:
+        for pid,q,price,line,ucost,lcost,unit_ids in lines:
+            if unit_ids: c.execute("UPDATE product_units SET status='sold',sale_id=%s,updated_at=NOW() WHERE id=ANY(%s)",(sid,unit_ids))
             c.execute("INSERT INTO sale_items(sale_id,product_id,quantity,unit_price,line_total,unit_cost,line_cost) VALUES(%s,%s,%s,%s,%s,%s,%s)",(sid,pid,q,price,line,ucost,lcost))
             newq=prods[pid][3]-q
             c.execute("UPDATE inventory_products SET quantity=%s,updated_at=NOW() WHERE id=%s",(newq,pid))
@@ -1035,6 +1189,7 @@ def void_sale(sale_id: int, d: SaleVoid, request: Request):
             c.execute("UPDATE inventory_products SET quantity=%s,unit_cost=%s,updated_at=NOW() WHERE id=%s",(newq,newcost,pid))
             c.execute("""INSERT INTO inventory_movements(product_id,user_id,movement_type,quantity_delta,quantity_after,note,unit_cost_before,unit_cost_after,sale_id)
                 VALUES(%s,%s,'sale_void',%s,%s,%s,%s,%s,%s)""",(pid,u['id'],q,newq,f"Anulación de venta #{sale_id}: {d.reason.strip()}",p[1],newcost,sale_id))
+        c.execute("UPDATE product_units SET status='available',sale_id=NULL,updated_at=NOW() WHERE sale_id=%s AND status='sold'",(sale_id,))
         c.execute("UPDATE sales SET status='voided',voided_by=%s,voided_at=NOW(),void_reason=%s WHERE id=%s",(u['id'],d.reason.strip(),sale_id))
     return {"id":sale_id,"status":"voided","message":f"Venta #{sale_id} anulada. Las piezas volvieron al inventario."}
 

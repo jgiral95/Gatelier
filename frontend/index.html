@@ -391,7 +391,7 @@
 
     // Colección: cada talla despliega sus forros únicos disponibles
     let catalog=[];let openSize=null;
-    const bySize=code=>catalog.filter(it=>it.size===code&&it.available&&it.photos&&it.photos.closed);
+    const bySize=code=>catalog.filter(it=>it.size===code&&it.available).flatMap(it=>(it.styles||[]).filter(st=>st.photos&&st.photos.closed).map(st=>({ref:st.ref,name:st.name||it.name,photos:st.photos,sale_price:it.sale_price})));
     function renderCards(){
       document.getElementById('cards').innerHTML=SIZES.map((s,i)=>{
         const n=bySize(s.code).length;const open=openSize===s.code;
