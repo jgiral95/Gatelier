@@ -223,4 +223,4 @@ def test_cancelar_guarda_fecha(admin):
 def test_catalogo_publico_no_expone_costes(admin):
     make_product(admin, "finished_product", quantity=2, unit_cost=50000, sale_price=80000)
     items = admin.get("/public/catalog").json()["items"]
-    assert items and all(set(i) == {"name", "unit", "sale_price", "available"} for i in items)
+    assert items and all(set(i) == {"id", "ref", "name", "unit", "sale_price", "available", "size", "photos"} for i in items)

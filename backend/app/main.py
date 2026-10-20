@@ -4,7 +4,7 @@ from datetime import datetime,timedelta,timezone,date
 from decimal import Decimal
 from typing import Optional, Literal, List
 import jwt, psycopg
-from fastapi import FastAPI,Form,HTTPException,Query,Request,Response
+from fastapi import FastAPI,File,Form,HTTPException,Query,Request,Response,UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel,Field
 from pwdlib import PasswordHash
@@ -41,6 +41,19 @@ async def lifespan(app):
         # Migración no destructiva: los productos existentes quedan como "Por clasificar".
         c.execute("ALTER TABLE inventory_products ADD COLUMN IF NOT EXISTS item_type VARCHAR(30) NOT NULL DEFAULT 'to_classify'")
         c.execute("ALTER TABLE inventory_products ADD COLUMN IF NOT EXISTS sale_price NUMERIC(14,2)")
+        # Talla pública de cada forro y fotos (cerrado / abierto) guardadas en la base, que ya tiene volumen y respaldo.
+        c.execute("ALTER TABLE inventory_products ADD COLUMN IF NOT EXISTS size_code VARCHAR(4)")
+        c.execute("""DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='inventory_products_size_valid') THEN
+                ALTER TABLE inventory_products ADD CONSTRAINT inventory_products_size_valid CHECK (size_code IS NULL OR size_code IN ('XS','S','M','L','XL'));
+            END IF;
+        END $$""")
+        c.execute("""CREATE TABLE IF NOT EXISTS product_photos(
+            product_id BIGINT NOT NULL REFERENCES inventory_products(id),
+            kind VARCHAR(10) NOT NULL CHECK(kind IN ('closed','open')),
+            content_type VARCHAR(20) NOT NULL, data BYTEA NOT NULL,
+            updated_by BIGINT REFERENCES app_users(id), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY(product_id,kind))""")
         c.execute("""DO $$ BEGIN
             IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'inventory_products_sale_price_nonnegative') THEN
                 ALTER TABLE inventory_products ADD CONSTRAINT inventory_products_sale_price_nonnegative CHECK (sale_price IS NULL OR sale_price >= 0);
@@ -180,8 +193,16 @@ ITEM_TYPE_LABELS = {
     "finished_product": "Producto terminado",
     "to_classify": "Por clasificar",
 }
+SIZE_CODES=("XS","S","M","L","XL")
+PHOTO_KINDS={"closed":"Cerrado","open":"Abierto"}
+PCOLS="""id,sku,name,item_type,category,unit,quantity,min_stock,unit_cost,sale_price,notes,updated_at,size_code,
+    (SELECT COALESCE(json_object_agg(ph.kind,floor(extract(epoch FROM ph.updated_at))::bigint),'{}'::json)
+     FROM product_photos ph WHERE ph.product_id=inventory_products.id)"""
+def photo_urls(pid, versions):
+    return {k:f"/api/public/photos/{pid}/{k}?v={v}" for k,v in (versions or {}).items()}
 def pack(r):
-    return {"id":r[0],"sku":r[1],"name":r[2],"item_type":r[3],"category":r[4],"unit":r[5],"quantity":r[6],"min_stock":r[7],"unit_cost":r[8],"sale_price":r[9],"notes":r[10],"updated_at":r[11]}
+    return {"id":r[0],"sku":r[1],"name":r[2],"item_type":r[3],"category":r[4],"unit":r[5],"quantity":r[6],"min_stock":r[7],"unit_cost":r[8],"sale_price":r[9],"notes":r[10],"updated_at":r[11],
+            "size_code":r[12],"photos":photo_urls(r[0],r[13])}
 
 DISCRETE_UNITS={"unidad","rollo","paquete"}
 def is_discrete_unit(unit:str)->bool:
@@ -195,13 +216,13 @@ class Product(BaseModel):
     category:str=Field(default="Sin categoría",max_length=100); unit:str=Field(default="unidad",max_length=30)
     quantity:Decimal=Field(default=Decimal(0),ge=0); min_stock:Decimal=Field(default=Decimal(0),ge=0)
     unit_cost:Decimal=Field(default=Decimal(0),ge=0); sale_price:Optional[Decimal]=Field(default=None,ge=0)
-    notes:str=Field(default="",max_length=4000)
+    notes:str=Field(default="",max_length=4000); size_code:Optional[Literal["XS","S","M","L","XL"]]=None
 class ProductUpdate(BaseModel):
     sku:str=Field(min_length=1,max_length=80); name:str=Field(min_length=1,max_length=180)
     item_type:str=Field(default="raw_material",max_length=30)
     category:str=Field(default="Sin categoría",max_length=100); unit:str=Field(default="unidad",max_length=30)
     min_stock:Decimal=Field(ge=0); unit_cost:Decimal=Field(ge=0); sale_price:Optional[Decimal]=Field(default=None,ge=0)
-    notes:str=Field(default="",max_length=4000)
+    notes:str=Field(default="",max_length=4000); size_code:Optional[Literal["XS","S","M","L","XL"]]=None
 class Receipt(BaseModel):
     quantity:Decimal=Field(gt=0,le=999999999)
     unit_cost:Decimal=Field(ge=0,le=999999999)
@@ -234,11 +255,56 @@ def health():
 def public_catalog():
     """Public storefront catalog; never returns internal notes, costs, or exact stock."""
     with psycopg.connect(DB) as c:
-        rows=c.execute("""SELECT name,unit,sale_price,quantity>0
+        rows=c.execute("""SELECT id,sku,name,unit,sale_price,quantity>0,size_code,
+                (SELECT COALESCE(json_object_agg(ph.kind,floor(extract(epoch FROM ph.updated_at))::bigint),'{}'::json)
+                 FROM product_photos ph WHERE ph.product_id=inventory_products.id)
             FROM inventory_products
             WHERE is_active=TRUE AND item_type='finished_product' AND sale_price IS NOT NULL
             ORDER BY name,id""").fetchall()
-    return {"items":[{"name":r[0],"unit":r[1],"sale_price":r[2],"available":r[3]} for r in rows]}
+    return {"items":[{"id":r[0],"ref":r[1],"name":r[2],"unit":r[3],"sale_price":r[4],"available":r[5],"size":r[6],
+                      "photos":photo_urls(r[0],r[7])} for r in rows]}
+
+MAX_PHOTO_BYTES=1_500_000
+def _image_type(data: bytes) -> Optional[str]:
+    if data[:3]==b"\xff\xd8\xff": return "image/jpeg"
+    if data[:8]==b"\x89PNG\r\n\x1a\n": return "image/png"
+    if data[:4]==b"RIFF" and data[8:12]==b"WEBP": return "image/webp"
+    return None
+
+@app.get("/public/photos/{pid}/{kind}")
+def public_photo(pid: int, kind: Literal["closed","open"]):
+    with psycopg.connect(DB) as c:
+        r=c.execute("""SELECT ph.content_type,ph.data FROM product_photos ph JOIN inventory_products p ON p.id=ph.product_id
+            WHERE ph.product_id=%s AND ph.kind=%s AND p.is_active AND p.item_type='finished_product'""",(pid,kind)).fetchone()
+    if not r: raise HTTPException(404,"Foto no encontrada")
+    return Response(content=bytes(r[1]),media_type=r[0],headers={"Cache-Control":"public, max-age=86400"})
+
+@app.post("/inventory/{pid}/photos/{kind}")
+async def upload_photo(pid: int, kind: Literal["closed","open"], request: Request, file: UploadFile = File(...)):
+    """Guarda la foto del forro cerrado o abierto. Reemplaza la anterior del mismo tipo."""
+    u=user_from(request)
+    data=await file.read(MAX_PHOTO_BYTES+1)
+    if len(data)>MAX_PHOTO_BYTES: raise HTTPException(413,"La foto pesa demasiado. Usa una de menos de 1,5 MB.")
+    ctype=_image_type(data)
+    if not ctype: raise HTTPException(422,"El archivo no es una imagen JPG, PNG o WebP")
+    with psycopg.connect(DB) as c:
+        p=c.execute("SELECT item_type FROM inventory_products WHERE id=%s AND is_active",(pid,)).fetchone()
+        if not p: raise HTTPException(404,"Producto no encontrado")
+        if p[0]!='finished_product': raise HTTPException(422,"Solo los productos terminados llevan fotos para la tienda")
+        c.execute("""INSERT INTO product_photos(product_id,kind,content_type,data,updated_by,updated_at) VALUES(%s,%s,%s,%s,%s,NOW())
+            ON CONFLICT(product_id,kind) DO UPDATE SET content_type=EXCLUDED.content_type,data=EXCLUDED.data,updated_by=EXCLUDED.updated_by,updated_at=NOW()""",
+            (pid,kind,ctype,data,u['id']))
+        out=c.execute(f"SELECT {PCOLS} FROM inventory_products WHERE id=%s",(pid,)).fetchone()
+    return {**pack(out),"message":f"Foto «{PHOTO_KINDS[kind]}» guardada"}
+
+@app.delete("/inventory/{pid}/photos/{kind}")
+def delete_photo(pid: int, kind: Literal["closed","open"], request: Request):
+    user_from(request)
+    with psycopg.connect(DB) as c:
+        if not c.execute("DELETE FROM product_photos WHERE product_id=%s AND kind=%s",(pid,kind)).rowcount:
+            raise HTTPException(404,"Esa foto no existe")
+        out=c.execute(f"SELECT {PCOLS} FROM inventory_products WHERE id=%s",(pid,)).fetchone()
+    return {**pack(out),"message":f"Foto «{PHOTO_KINDS[kind]}» eliminada"}
 
 @app.post("/auth/login")
 def login(response:Response,username:str=Form(...),password:str=Form(...)):
@@ -361,7 +427,7 @@ def delete_category(category_id:int,request:Request):
 def inventory(request:Request,search:str=Query("",max_length=120),status:str=Query("all",pattern="^(all|low|ok)$"),item_type:str=Query("all",pattern="^(all|raw_material|recovered_material|work_in_progress|finished_product|to_classify)$")):
     user_from(request);term=f"%{search.strip()}%"
     with psycopg.connect(DB) as c:
-        rows=c.execute("""SELECT id,sku,name,item_type,category,unit,quantity,min_stock,unit_cost,sale_price,notes,updated_at FROM inventory_products
+        rows=c.execute(f"""SELECT {PCOLS} FROM inventory_products
         WHERE is_active AND (%s='' OR sku ILIKE %s OR name ILIKE %s OR category ILIKE %s)
         AND (%s='all' OR (%s='low' AND quantity<=min_stock) OR (%s='ok' AND quantity>min_stock))
         AND (%s='all' OR item_type=%s) ORDER BY name""",
@@ -377,11 +443,12 @@ def create_product(d:Product,request:Request):
     require_integer_quantity(d.quantity,d.unit,"La existencia inicial")
     require_integer_quantity(d.min_stock,d.unit,"El stock mínimo")
     sale_price = d.sale_price if d.item_type == "finished_product" else None
+    size_code = d.size_code if d.item_type == "finished_product" else None
     try:
         with psycopg.connect(DB) as c:
-            r=c.execute("""INSERT INTO inventory_products(sku,name,item_type,category,unit,quantity,min_stock,unit_cost,sale_price,notes)
-            VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id,sku,name,item_type,category,unit,quantity,min_stock,unit_cost,sale_price,notes,updated_at""",
-            (sku,name,d.item_type,d.category.strip() or "Sin categoría",d.unit.strip() or "unidad",d.quantity,d.min_stock,d.unit_cost,sale_price,d.notes.strip())).fetchone()
+            r=c.execute(f"""INSERT INTO inventory_products(sku,name,item_type,category,unit,quantity,min_stock,unit_cost,sale_price,notes,size_code)
+            VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING {PCOLS}""",
+            (sku,name,d.item_type,d.category.strip() or "Sin categoría",d.unit.strip() or "unidad",d.quantity,d.min_stock,d.unit_cost,sale_price,d.notes.strip(),size_code)).fetchone()
             if d.quantity>0:c.execute("""INSERT INTO inventory_movements(product_id,user_id,movement_type,quantity_delta,quantity_after,note)
             VALUES(%s,%s,'initial',%s,%s,'Existencia inicial')""",(r[0],u["id"],d.quantity,d.quantity))
         return pack(r)
@@ -393,6 +460,7 @@ def update_product(pid:int,d:ProductUpdate,request:Request):
     if d.item_type not in ITEM_TYPES: raise HTTPException(422,"Tipo de artículo no válido")
     require_integer_quantity(d.min_stock,d.unit,"El stock mínimo")
     sale_price = d.sale_price if d.item_type == "finished_product" else None
+    size_code = d.size_code if d.item_type == "finished_product" else None
     try:
         with psycopg.connect(DB) as c:
             row=c.execute("SELECT id,quantity,item_type FROM inventory_products WHERE id=%s AND is_active FOR UPDATE",(pid,)).fetchone()
@@ -402,10 +470,10 @@ def update_product(pid:int,d:ProductUpdate,request:Request):
                 if linked:
                     raise HTTPException(409,"Este producto está asociado a una o más fichas de producción. Cambia o desactiva primero esas fichas antes de quitarle el tipo Producto terminado.")
             require_integer_quantity(row[1],d.unit,"La existencia actual")
-            out=c.execute("""UPDATE inventory_products SET sku=%s,name=%s,item_type=%s,category=%s,unit=%s,
-            min_stock=%s,unit_cost=%s,sale_price=%s,notes=%s,updated_at=NOW() WHERE id=%s
-            RETURNING id,sku,name,item_type,category,unit,quantity,min_stock,unit_cost,sale_price,notes,updated_at""",
-            (sku,name,d.item_type,category,d.unit.strip() or "unidad",d.min_stock,d.unit_cost,sale_price,d.notes.strip(),pid)).fetchone()
+            out=c.execute(f"""UPDATE inventory_products SET sku=%s,name=%s,item_type=%s,category=%s,unit=%s,
+            min_stock=%s,unit_cost=%s,sale_price=%s,notes=%s,size_code=%s,updated_at=NOW() WHERE id=%s
+            RETURNING {PCOLS}""",
+            (sku,name,d.item_type,category,d.unit.strip() or "unidad",d.min_stock,d.unit_cost,sale_price,d.notes.strip(),size_code,pid)).fetchone()
         return pack(out)
     except UniqueViolation: raise HTTPException(409,"Ya existe un producto con esa referencia (SKU)")
 
@@ -427,7 +495,7 @@ def receive_stock(pid:int,d:Receipt,request:Request):
         note=d.note.strip() or "Entrada valorizada"
         c.execute("""INSERT INTO inventory_movements(product_id,user_id,movement_type,quantity_delta,quantity_after,note,unit_cost_before,unit_cost_after)
         VALUES(%s,%s,'receipt',%s,%s,%s,%s,%s)""",(pid,u['id'],d.quantity,new_qty,note,old_cost,weighted))
-        out=c.execute("SELECT id,sku,name,item_type,category,unit,quantity,min_stock,unit_cost,sale_price,notes,updated_at FROM inventory_products WHERE id=%s",(pid,)).fetchone()
+        out=c.execute(f"SELECT {PCOLS} FROM inventory_products WHERE id=%s",(pid,)).fetchone()
     return {**pack(out),"receipt":{"quantity":d.quantity,"received_unit_cost":d.unit_cost,"previous_unit_cost":old_cost,"weighted_average_unit_cost":weighted}}
 
 @app.post("/inventory/{pid}/adjust")
@@ -444,7 +512,7 @@ def adjust(pid:int,d:Adjustment,request:Request):
         c.execute("UPDATE inventory_products SET quantity=%s,updated_at=NOW() WHERE id=%s",(new,pid))
         c.execute("""INSERT INTO inventory_movements(product_id,user_id,movement_type,quantity_delta,quantity_after,note)
         VALUES(%s,%s,%s,%s,%s,%s)""",(pid,u["id"],d.direction,delta,new,d.note.strip() or ("Entrada manual" if delta>0 else "Salida manual")))
-        out=c.execute("SELECT id,sku,name,item_type,category,unit,quantity,min_stock,unit_cost,sale_price,notes,updated_at FROM inventory_products WHERE id=%s",(pid,)).fetchone()
+        out=c.execute(f"SELECT {PCOLS} FROM inventory_products WHERE id=%s",(pid,)).fetchone()
     return pack(out)
 @app.get("/movements")
 def all_movements(request:Request,search:str=Query("",max_length=120),movement_type:str=Query("all",max_length=30),product_id:Optional[int]=None):

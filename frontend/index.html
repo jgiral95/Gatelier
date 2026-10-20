@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#344a42">
   <meta name="description" content="Forros textiles hechos a mano en Gatelier con telas recuperadas. Cinco tallas, del libro de bolsillo al de gran formato. Consulta y compra por WhatsApp.">
-  <title>Gatelier — Atelier textil consciente</title>
+  <link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png"><link rel="icon" type="image/png" sizes="192x192" href="/assets/icon-192.png"><link rel="apple-touch-icon" href="/assets/apple-touch-icon.png"><title>Gatelier — Atelier textil consciente</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=Work+Sans:wght@400;500;600&display=swap">
@@ -107,14 +107,31 @@
     .card-foot{margin-top:auto;padding-top:12px;display:flex;flex-direction:column;gap:10px}
     .card-price{font-size:17px;font-weight:600;font-variant-numeric:tabular-nums}
     .card .btn{min-height:44px;font-size:14px;padding:0 16px}
-    .stock{margin-top:40px;border-top:1px solid var(--line);padding-top:28px}
-    .stock h3{margin:0 0 6px;font:500 24px var(--serif)}
-    .stock-list{margin:16px 0 0;padding:0;list-style:none;display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr));gap:12px}
-    .stock-item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border:1px solid var(--line);border-radius:6px;background:var(--paper-2)}
-    .stock-item strong{display:block;font-weight:600}
-    .stock-item small{color:var(--muted)}
-    .stock-item .tag{font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:var(--sage);white-space:nowrap}
-    .stock-item .tag.out{color:#8a6a62}
+    .card-count{font-size:13px;font-weight:600;color:var(--sage)}
+    .card-count.none{color:var(--muted);font-weight:500}
+    .card.open{border-color:var(--forest);box-shadow:0 0 0 1px var(--forest)}
+    .card-toggle{all:unset;cursor:pointer;display:flex;flex-direction:column;flex:1}
+    .card-toggle:focus-visible{outline:2px solid var(--leather);outline-offset:-2px}
+    .styles{margin-top:28px;border:1px solid var(--line);border-radius:8px;background:var(--paper-2);padding:24px}
+    .styles-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-start;gap:12px 24px;margin-bottom:20px}
+    .styles-head h3{margin:0;font:400 30px/1.1 var(--serif);letter-spacing:-.01em}
+    .styles-head p{margin:6px 0 0;color:var(--text);font-size:15px}
+    .styles-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,230px),1fr));gap:20px}
+    .style{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--white);min-width:0}
+    .style-photo{position:relative;aspect-ratio:4/5;max-width:100%;background:#f1efe6}
+    .style-photo img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transition:opacity .25s}
+    .style-photo img.inner{opacity:0}
+    .style.show-open .style-photo img.inner{opacity:1}
+    .style.show-open .style-photo img.outer{opacity:0}
+    .view-switch{position:absolute;left:10px;bottom:10px;display:flex;background:#ffffffe6;border-radius:999px;padding:3px;gap:2px}
+    .view-switch button{border:0;background:transparent;border-radius:999px;padding:6px 12px;font:600 12px var(--sans);color:var(--forest);cursor:pointer;min-height:32px}
+    .view-switch button[aria-pressed="true"]{background:var(--forest);color:var(--white)}
+    .style-body{padding:14px 16px 16px;display:flex;flex-direction:column;gap:6px;flex:1}
+    .style-body h4{margin:0;font:500 19px/1.2 var(--serif)}
+    .style-ref{font-size:12px;color:var(--muted);letter-spacing:.04em}
+    .style-body .btn{margin-top:auto;min-height:44px;font-size:14px}
+    .styles-empty{margin:0;color:var(--text);font-size:15px}
+    @media (max-width:560px){.styles{padding:18px 14px}.styles-head h3{font-size:26px}}
 
     /* La tela */
     .fabric{background:var(--forest);color:#eef3f0}
@@ -251,14 +268,10 @@
       <div class="wrap section">
         <div class="section-head">
           <div><span class="eyebrow">Hecho a mano en Gatelier</span><h2 class="h2">La colección</h2></div>
-          <p>Cada pieza es única. Cuando una combinación se vende, el siguiente lote trae telas distintas. Confirma la disponibilidad por WhatsApp.</p>
+          <p>Cada forro es único. Toca una talla para ver los estilos disponibles hoy, por fuera y por dentro.</p>
         </div>
         <div class="cards" id="cards"></div>
-        <div class="stock" id="stock" hidden>
-          <h3>Disponibilidad en el atelier</h3>
-          <p class="small">Referencias registradas en el inventario. Confirma por WhatsApp antes de coordinar tu compra.</p>
-          <ul class="stock-list" id="stock-list"></ul>
-        </div>
+        <div class="styles" id="styles" hidden tabindex="-1" aria-live="polite"></div>
       </div>
     </section>
 
@@ -376,27 +389,46 @@
     inW.addEventListener('input',checkBook);inH.addEventListener('input',checkBook);
     document.getElementById('measure').addEventListener('submit',e=>{e.preventDefault();checkBook();});
 
-    // Colección
-    document.getElementById('cards').innerHTML=SIZES.map((s,i)=>{
-      const link=waLink(sizeMsg(s));
-      const btn=link?`<a class="btn" href="${link}" target="_blank" rel="noopener noreferrer">Pedir por WhatsApp</a>`:`<span class="btn disabled" aria-disabled="true">WhatsApp pronto</span>`;
-      return `<article class="card"><div class="card-photo"><img src="/assets/products/${s.image}" alt="${esc(s.alt)}" loading="${i<3?'eager':'lazy'}" decoding="async"></div><div class="card-body"><h3>Talla ${s.code}</h3><span class="card-dims">${s.w} × ${s.h} cm</span><div class="card-foot"><span class="card-price">${money(s.price)}</span>${btn}</div></div></article>`;
-    }).join('');
-
-    // Disponibilidad desde el inventario (solo se muestra si hay referencias públicas)
-    async function loadStock(){
-      try{
-        const r=await fetch('/api/public/catalog',{headers:{Accept:'application/json'}});
-        if(!r.ok)return;
-        const items=(await r.json()).items||[];
-        if(!items.length)return;
-        document.getElementById('stock-list').innerHTML=items.map(it=>{
-          const ok=Boolean(it.available);
-          return `<li class="stock-item"><div><strong>${esc(it.name)}</strong><small>${money(it.sale_price)} por ${esc(it.unit)}</small></div><span class="tag ${ok?'':'out'}">${ok?'Disponible':'Consultar'}</span></li>`;
-        }).join('');
-        document.getElementById('stock').hidden=false;
-      }catch(_){/* La galería sigue funcionando sin el inventario. */}
+    // Colección: cada talla despliega sus forros únicos disponibles
+    let catalog=[];let openSize=null;
+    const bySize=code=>catalog.filter(it=>it.size===code&&it.available&&it.photos&&it.photos.closed);
+    function renderCards(){
+      document.getElementById('cards').innerHTML=SIZES.map((s,i)=>{
+        const n=bySize(s.code).length;const open=openSize===s.code;
+        const count=catalogLoaded?(n?`<span class="card-count">${n} estilo${n===1?'':'s'} disponible${n===1?'':'s'}</span>`:'<span class="card-count none">Sin estilos disponibles hoy</span>'):'<span class="card-count none">Cargando estilos…</span>';
+        return `<article class="card ${open?'open':''}"><button class="card-toggle" type="button" data-size="${s.code}" aria-expanded="${open}" aria-controls="styles"><div class="card-photo"><img src="/assets/products/${s.image}" alt="${esc(s.alt)}" loading="${i<3?'eager':'lazy'}" decoding="async"></div><div class="card-body"><h3>Talla ${s.code}</h3><span class="card-dims">${s.w} × ${s.h} cm</span>${count}<div class="card-foot"><span class="card-price">${money(s.price)}</span><span class="btn">${open?'Ocultar estilos':'Ver estilos'}</span></div></div></button></article>`;
+      }).join('');
     }
+    function styleCard(it,s){
+      const msg=`Hola, me interesa el forro ${it.name} (ref. ${it.ref}, talla ${s.code}, ${money(it.sale_price)}) que vi en la página de Gatelier. ¿Sigue disponible?`;
+      const link=waLink(msg);const both=it.photos.open;
+      return `<article class="style"><div class="style-photo"><img class="outer" src="${esc(it.photos.closed)}" alt="${esc(it.name)}, cerrado: tela exterior" loading="lazy">${both?`<img class="inner" src="${esc(it.photos.open)}" alt="${esc(it.name)}, abierto: tela interior" loading="lazy"><div class="view-switch" role="group" aria-label="Ver el forro"><button type="button" data-view="closed" aria-pressed="true">Cerrado</button><button type="button" data-view="open" aria-pressed="false">Abierto</button></div>`:''}</div><div class="style-body"><h4>${esc(it.name)}</h4><span class="style-ref">Ref. ${esc(it.ref)}</span><span class="card-price">${money(it.sale_price)}</span>${link?`<a class="btn" href="${link}" target="_blank" rel="noopener noreferrer">Lo quiero · WhatsApp</a>`:'<span class="btn disabled" aria-disabled="true">WhatsApp pronto</span>'}</div></article>`;
+    }
+    function renderStyles(){
+      const box=document.getElementById('styles');
+      if(!openSize){box.hidden=true;box.innerHTML='';return}
+      const s=SIZES.find(x=>x.code===openSize);const list=bySize(openSize);
+      const head=`<div class="styles-head"><div><span class="eyebrow">Talla ${s.code} · ${s.w} × ${s.h} cm</span><h3>${list.length?`${list.length} estilo${list.length===1?' único':'s únicos'} disponible${list.length===1?'':'s'}`:'Por ahora no hay estilos en esta talla'}</h3><p>${list.length?'Cada uno es una pieza única. Usa «Abierto» para ver la tela de adentro.':'Cada lote trae telas nuevas. Escríbenos y te avisamos cuando haya forros de esta talla.'}</p></div><button class="btn ghost" type="button" data-close-styles>Cerrar</button></div>`;
+      const link=waLink(sizeMsg(s));
+      box.innerHTML=head+(list.length?`<div class="styles-grid">${list.map(it=>styleCard(it,s)).join('')}</div>`:(link?`<a class="btn" href="${link}" target="_blank" rel="noopener noreferrer">Consultar la talla ${s.code} por WhatsApp</a>`:''));
+      box.hidden=false;
+    }
+    let catalogLoaded=false;
+    document.getElementById('cards').addEventListener('click',e=>{
+      const b=e.target.closest('.card-toggle');if(!b)return;
+      openSize=openSize===b.dataset.size?null:b.dataset.size;renderCards();renderStyles();
+      if(openSize){const box=document.getElementById('styles');box.focus({preventScroll:true});box.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'})}
+    });
+    document.getElementById('styles').addEventListener('click',e=>{
+      const v=e.target.closest('[data-view]');
+      if(v){const card=v.closest('.style');card.classList.toggle('show-open',v.dataset.view==='open');card.querySelectorAll('[data-view]').forEach(x=>x.setAttribute('aria-pressed',String(x===v)));return}
+      if(e.target.closest('[data-close-styles]')){const code=openSize;openSize=null;renderCards();renderStyles();const t=document.querySelector(`.card-toggle[data-size="${code}"]`);if(t)t.focus()}
+    });
+    async function loadCatalog(){
+      try{const r=await fetch('/api/public/catalog',{headers:{Accept:'application/json'}});if(r.ok)catalog=(await r.json()).items||[]}catch(_){/* La galería funciona sin inventario. */}
+      catalogLoaded=true;renderCards();renderStyles();
+    }
+    renderCards();
 
     // Contacto
     const general='Hola, vengo de la página de Gatelier y quiero consultar por un forro.';
@@ -404,7 +436,7 @@
     if(waNumber){const n=waNumber.replace(/^57(\d{3})(\d{3})(\d{4})$/,'+57 $1 $2 $3');document.getElementById('wa-display').textContent=`WhatsApp ${n.startsWith('+')?n:'+'+waNumber} · `;}
     document.getElementById('year').textContent=new Date().getFullYear();
 
-    selectSize('S');checkBook();loadStock();
+    selectSize('S');checkBook();loadCatalog();
   </script>
 </body>
 </html>
