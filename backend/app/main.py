@@ -108,6 +108,29 @@ async def lifespan(app):
                     "cancelled_at TIMESTAMPTZ", "reopened_at TIMESTAMPTZ", "reopen_count INTEGER NOT NULL DEFAULT 0"):
             c.execute(f"ALTER TABLE production_orders ADD COLUMN IF NOT EXISTS {col}")
         c.execute("ALTER TABLE production_order_materials ADD COLUMN IF NOT EXISTS actual_unit_cost NUMERIC(14,2)")
+        # Ventas: cabecera, líneas con coste histórico y vínculo de cada movimiento con su venta.
+        c.execute("""CREATE TABLE IF NOT EXISTS sales(
+            id BIGSERIAL PRIMARY KEY, sale_date DATE NOT NULL DEFAULT CURRENT_DATE,
+            channel VARCHAR(20) NOT NULL CHECK(channel IN ('whatsapp','instagram','in_person')),
+            payment_method VARCHAR(20) NOT NULL CHECK(payment_method IN ('cash','transfer')),
+            customer_name VARCHAR(160) NOT NULL DEFAULT '', customer_contact VARCHAR(160) NOT NULL DEFAULT '',
+            subtotal NUMERIC(14,2) NOT NULL CHECK(subtotal>=0), discount NUMERIC(14,2) NOT NULL DEFAULT 0 CHECK(discount>=0),
+            shipping NUMERIC(14,2) NOT NULL DEFAULT 0 CHECK(shipping>=0), total NUMERIC(14,2) NOT NULL CHECK(total>=0),
+            cost_total NUMERIC(14,2) NOT NULL DEFAULT 0 CHECK(cost_total>=0),
+            status VARCHAR(20) NOT NULL DEFAULT 'completed' CHECK(status IN ('completed','voided')),
+            note TEXT NOT NULL DEFAULT '', client_ref VARCHAR(64) UNIQUE,
+            created_by BIGINT REFERENCES app_users(id), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            voided_by BIGINT REFERENCES app_users(id), voided_at TIMESTAMPTZ, void_reason TEXT NOT NULL DEFAULT '',
+            CHECK(discount<=subtotal))""")
+        c.execute("""CREATE TABLE IF NOT EXISTS sale_items(
+            id BIGSERIAL PRIMARY KEY, sale_id BIGINT NOT NULL REFERENCES sales(id),
+            product_id BIGINT NOT NULL REFERENCES inventory_products(id),
+            quantity NUMERIC(14,3) NOT NULL CHECK(quantity>0), unit_price NUMERIC(14,2) NOT NULL CHECK(unit_price>=0),
+            line_total NUMERIC(14,2) NOT NULL CHECK(line_total>=0),
+            unit_cost NUMERIC(14,2) NOT NULL DEFAULT 0, line_cost NUMERIC(14,2) NOT NULL DEFAULT 0,
+            UNIQUE(sale_id,product_id))""")
+        c.execute("CREATE INDEX IF NOT EXISTS sales_date_idx ON sales(sale_date)")
+        c.execute("ALTER TABLE inventory_movements ADD COLUMN IF NOT EXISTS sale_id BIGINT REFERENCES sales(id)")
         # Órdenes completadas antes de esta versión consumieron exactamente lo previsto: se registran así una sola vez.
         c.execute("""UPDATE production_orders SET good_quantity=planned_quantity, actual_labor_hours=labor_hours,
             actual_material_cost=material_cost, actual_labor_cost=labor_cost,
@@ -428,7 +451,7 @@ def all_movements(request:Request,search:str=Query("",max_length=120),movement_t
               AND (%s='all' OR m.movement_type=%s)
             ORDER BY m.created_at DESC,m.id DESC LIMIT 1000""",
             (product_id,product_id,search.strip(),term,term,term,term,movement_type,movement_type)).fetchall()
-    labels={"initial":"Existencia inicial","receipt":"Entrada valorizada","add":"Entrada manual","remove":"Salida manual","production_consumption":"Consumo de producción","production_output":"Producto terminado de producción","production_reversal":"Reversión de producción"}
+    labels={"initial":"Existencia inicial","receipt":"Entrada valorizada","add":"Entrada manual","remove":"Salida manual","production_consumption":"Consumo de producción","production_output":"Producto terminado de producción","production_reversal":"Reversión de producción","sale":"Venta","sale_void":"Venta anulada"}
     return {"items":[{"id":r[0],"type":r[1],"type_label":labels.get(r[1],r[1].replace('_',' ').capitalize()),
         "delta":r[2],"quantity_after":r[3],"note":r[4],"created_at":r[5],"username":r[6],
         "unit_cost_before":r[7],"unit_cost_after":r[8],"product_id":r[9],"sku":r[10],"product_name":r[11],"unit":r[12]} for r in rows]}
@@ -762,3 +785,174 @@ def cancel_production_order(order_id: int, request: Request):
         if r[0] not in ('planned','in_progress'): raise HTTPException(409,"Solo se pueden cancelar órdenes abiertas")
         c.execute("UPDATE production_orders SET status='cancelled',cancelled_at=NOW() WHERE id=%s",(order_id,))
     return {"id":order_id,"status":"cancelled"}
+
+
+# ------------------------------- VENTAS -------------------------------
+try:
+    from zoneinfo import ZoneInfo
+    LOCAL_TZ=ZoneInfo(os.environ.get("APP_TIMEZONE","America/Bogota"))
+except Exception:
+    LOCAL_TZ=timezone(timedelta(hours=-5))  # Colombia no usa horario de verano
+def local_today()->date:
+    return datetime.now(LOCAL_TZ).date()
+
+SALE_CHANNELS={"whatsapp":"WhatsApp","instagram":"Instagram","in_person":"Presencial"}
+PAYMENT_METHODS={"cash":"Efectivo","transfer":"Transferencia"}
+
+class SaleItemInput(BaseModel):
+    product_id: int
+    quantity: Decimal = Field(gt=0, le=999999)
+    unit_price: Decimal = Field(ge=0, le=999999999)
+class SaleCreate(BaseModel):
+    sale_date: Optional[date] = None
+    channel: Literal["whatsapp","instagram","in_person"]
+    payment_method: Literal["cash","transfer"]
+    customer_name: str = Field(default="", max_length=160)
+    customer_contact: str = Field(default="", max_length=160)
+    items: List[SaleItemInput] = Field(min_length=1, max_length=50)
+    discount: Decimal = Field(default=Decimal(0), ge=0, le=999999999)
+    shipping: Decimal = Field(default=Decimal(0), ge=0, le=999999999)
+    note: str = Field(default="", max_length=1000)
+    client_ref: Optional[str] = Field(default=None, min_length=8, max_length=64, pattern=r"^[A-Za-z0-9-]+$")
+class SaleVoid(BaseModel):
+    reason: str = Field(min_length=3, max_length=500)
+
+SALE_COLUMNS="""s.id,s.sale_date,s.channel,s.payment_method,s.customer_name,s.customer_contact,s.subtotal,s.discount,
+    s.shipping,s.total,s.cost_total,s.status,s.note,cu.username,s.created_at,vu.username,s.voided_at,s.void_reason"""
+SALE_FROM="""FROM sales s LEFT JOIN app_users cu ON cu.id=s.created_by LEFT JOIN app_users vu ON vu.id=s.voided_by"""
+
+def _sale_dict(r, items=None):
+    net=r[6]-r[7]
+    d={"id":r[0],"sale_date":r[1].isoformat(),"channel":r[2],"channel_label":SALE_CHANNELS.get(r[2],r[2]),
+       "payment_method":r[3],"payment_label":PAYMENT_METHODS.get(r[3],r[3]),"customer_name":r[4],"customer_contact":r[5],
+       "subtotal":r[6],"discount":r[7],"shipping":r[8],"total":r[9],"net_revenue":net,"cost_total":r[10],
+       "margin":net-r[10],"status":r[11],"note":r[12],"created_by":r[13],"created_at":r[14],
+       "voided_by":r[15],"voided_at":r[16],"void_reason":r[17]}
+    if items is not None: d["items"]=items
+    return d
+
+def _sale_items(c, ids):
+    if not ids: return {}
+    rows=c.execute("""SELECT si.sale_id,si.product_id,p.sku,p.name,p.unit,si.quantity,si.unit_price,si.line_total,si.unit_cost,si.line_cost
+        FROM sale_items si JOIN inventory_products p ON p.id=si.product_id WHERE si.sale_id=ANY(%s) ORDER BY si.id""",(list(ids),)).fetchall()
+    out={}
+    for r in rows:
+        out.setdefault(r[0],[]).append({"product_id":r[1],"sku":r[2],"name":r[3],"unit":r[4],"quantity":r[5],
+            "unit_price":r[6],"line_total":r[7],"unit_cost":r[8],"line_cost":r[9]})
+    return out
+
+@app.get("/sales/options")
+def sales_options(request: Request):
+    user_from(request)
+    with psycopg.connect(DB) as c:
+        rows=c.execute("""SELECT id,sku,name,unit,quantity,sale_price FROM inventory_products
+            WHERE is_active AND item_type='finished_product' ORDER BY name""").fetchall()
+    return {"products":[{"id":r[0],"sku":r[1],"name":r[2],"unit":r[3],"quantity":r[4],"sale_price":r[5]} for r in rows],
+            "channels":SALE_CHANNELS,"payment_methods":PAYMENT_METHODS}
+
+@app.get("/sales")
+def list_sales(request: Request, month: str = Query("", pattern=r"^(\d{4}-\d{2})?$"),
+               channel: str = Query("all", pattern="^(all|whatsapp|instagram|in_person)$"),
+               status: str = Query("all", pattern="^(all|completed|voided)$"),
+               search: str = Query("", max_length=120)):
+    user_from(request)
+    start=_month_date(month) if month else None
+    end=(date(start.year+(start.month==12), start.month%12+1, 1)) if start else None
+    term=f"%{search.strip()}%"
+    with psycopg.connect(DB) as c:
+        where="""WHERE (%(start)s::date IS NULL OR (s.sale_date>=%(start)s AND s.sale_date<%(end)s))
+            AND (%(channel)s='all' OR s.channel=%(channel)s) AND (%(status)s='all' OR s.status=%(status)s)
+            AND (%(search)s='' OR s.customer_name ILIKE %(term)s OR s.customer_contact ILIKE %(term)s OR s.note ILIKE %(term)s
+                 OR EXISTS(SELECT 1 FROM sale_items si JOIN inventory_products p ON p.id=si.product_id
+                           WHERE si.sale_id=s.id AND (p.name ILIKE %(term)s OR p.sku ILIKE %(term)s)))"""
+        params={"start":start,"end":end,"channel":channel,"status":status,"search":search.strip(),"term":term}
+        rows=c.execute(f"SELECT {SALE_COLUMNS} {SALE_FROM} {where} ORDER BY s.sale_date DESC,s.id DESC LIMIT 500",params).fetchall()
+        items=_sale_items(c,[r[0] for r in rows])
+        agg=c.execute(f"""SELECT COUNT(*),COALESCE(SUM(s.subtotal-s.discount),0),COALESCE(SUM(s.shipping),0),
+            COALESCE(SUM(s.cost_total),0),COALESCE(SUM(s.discount),0)
+            {SALE_FROM} {where} AND s.status='completed'""",params).fetchone()
+        units=c.execute(f"""SELECT COALESCE(SUM(si.quantity),0) FROM sale_items si JOIN sales s ON s.id=si.sale_id
+            LEFT JOIN app_users cu ON cu.id=s.created_by LEFT JOIN app_users vu ON vu.id=s.voided_by
+            {where} AND s.status='completed'""",params).fetchone()[0]
+        by_channel=c.execute(f"""SELECT s.channel,COUNT(*),COALESCE(SUM(s.subtotal-s.discount),0) {SALE_FROM} {where}
+            AND s.status='completed' GROUP BY s.channel ORDER BY 3 DESC""",params).fetchall()
+    return {"items":[_sale_dict(r,items.get(r[0],[])) for r in rows],
+            "summary":{"sales":agg[0],"net_revenue":agg[1],"shipping":agg[2],"cost":agg[3],"discounts":agg[4],
+                       "margin":agg[1]-agg[3],"units":units,
+                       "by_channel":[{"channel":r[0],"label":SALE_CHANNELS.get(r[0],r[0]),"sales":r[1],"net_revenue":r[2]} for r in by_channel]}}
+
+@app.get("/sales/{sale_id}")
+def sale_detail(sale_id: int, request: Request):
+    user_from(request)
+    with psycopg.connect(DB) as c:
+        r=c.execute(f"SELECT {SALE_COLUMNS} {SALE_FROM} WHERE s.id=%s",(sale_id,)).fetchone()
+        if not r: raise HTTPException(404,"Venta no encontrada")
+        return _sale_dict(r,_sale_items(c,[sale_id]).get(sale_id,[]))
+
+@app.post("/sales", status_code=201)
+def create_sale(d: SaleCreate, request: Request, response: Response):
+    """Registra una venta y descuenta el stock en una sola transacción. Guarda el coste del día de la venta."""
+    u=user_from(request)
+    ids=[i.product_id for i in d.items]
+    if len(set(ids))!=len(ids): raise HTTPException(422,"No repitas el mismo producto; ajusta la cantidad en una sola línea")
+    sale_date=d.sale_date or local_today()
+    if sale_date>local_today(): raise HTTPException(422,"La fecha de la venta no puede estar en el futuro")
+    with psycopg.connect(DB) as c:
+        if d.client_ref:
+            prev=c.execute("SELECT id FROM sales WHERE client_ref=%s",(d.client_ref,)).fetchone()
+            if prev:
+                response.status_code=200
+                r=c.execute(f"SELECT {SALE_COLUMNS} {SALE_FROM} WHERE s.id=%s",(prev[0],)).fetchone()
+                return {**_sale_dict(r,_sale_items(c,[prev[0]]).get(prev[0],[])),"duplicate":True}
+        # Bloquea los productos siempre en el mismo orden para evitar bloqueos cruzados entre ventas simultáneas.
+        prods={}
+        for pid in sorted(ids):
+            p=c.execute("SELECT id,name,unit,quantity,unit_cost,item_type,is_active FROM inventory_products WHERE id=%s FOR UPDATE",(pid,)).fetchone()
+            if not p or not p[6]: raise HTTPException(404,f"El producto {pid} no existe o está inactivo")
+            if p[5]!='finished_product': raise HTTPException(422,f"{p[1]} no es un producto terminado; solo se venden productos terminados")
+            prods[pid]=p
+        subtotal=Decimal(0); cost=Decimal(0); lines=[]
+        for it in d.items:
+            p=prods[it.product_id]
+            require_integer_quantity(it.quantity,p[2],f"La cantidad de {p[1]}")
+            if p[3]<it.quantity: raise HTTPException(409,f"Stock insuficiente de {p[1]}: disponible {p[3]} {p[2]}, pedido {it.quantity} {p[2]}")
+            line=(it.quantity*it.unit_price).quantize(Decimal('0.01'))
+            lcost=(it.quantity*p[4]).quantize(Decimal('0.01'))
+            subtotal+=line; cost+=lcost
+            lines.append((it.product_id,it.quantity,it.unit_price,line,p[4],lcost))
+        if d.discount>subtotal: raise HTTPException(422,"El descuento no puede ser mayor que el valor de los productos")
+        total=(subtotal-d.discount+d.shipping).quantize(Decimal('0.01'))
+        try:
+            sid=c.execute("""INSERT INTO sales(sale_date,channel,payment_method,customer_name,customer_contact,subtotal,discount,shipping,total,cost_total,note,client_ref,created_by)
+                VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
+                (sale_date,d.channel,d.payment_method,d.customer_name.strip(),d.customer_contact.strip(),subtotal,d.discount,d.shipping,total,cost,d.note.strip(),d.client_ref,u['id'])).fetchone()[0]
+        except UniqueViolation:
+            raise HTTPException(409,"Esta venta ya se estaba registrando. Actualiza la lista para verla.")
+        for pid,q,price,line,ucost,lcost in lines:
+            c.execute("INSERT INTO sale_items(sale_id,product_id,quantity,unit_price,line_total,unit_cost,line_cost) VALUES(%s,%s,%s,%s,%s,%s,%s)",(sid,pid,q,price,line,ucost,lcost))
+            newq=prods[pid][3]-q
+            c.execute("UPDATE inventory_products SET quantity=%s,updated_at=NOW() WHERE id=%s",(newq,pid))
+            c.execute("""INSERT INTO inventory_movements(product_id,user_id,movement_type,quantity_delta,quantity_after,note,unit_cost_before,unit_cost_after,sale_id)
+                VALUES(%s,%s,'sale',%s,%s,%s,%s,%s,%s)""",(pid,u['id'],-q,newq,f"Venta #{sid} · {SALE_CHANNELS[d.channel]}",ucost,ucost,sid))
+        r=c.execute(f"SELECT {SALE_COLUMNS} {SALE_FROM} WHERE s.id=%s",(sid,)).fetchone()
+        return _sale_dict(r,_sale_items(c,[sid]).get(sid,[]))
+
+@app.post("/sales/{sale_id}/void")
+def void_sale(sale_id: int, d: SaleVoid, request: Request):
+    """Anula una venta: devuelve las piezas al inventario y conserva el registro."""
+    u=require_admin(request)
+    with psycopg.connect(DB) as c:
+        s=c.execute("SELECT id,status FROM sales WHERE id=%s FOR UPDATE",(sale_id,)).fetchone()
+        if not s: raise HTTPException(404,"Venta no encontrada")
+        if s[1]!='completed': raise HTTPException(409,"Esta venta ya fue anulada")
+        items=c.execute("SELECT product_id,quantity,unit_cost FROM sale_items WHERE sale_id=%s ORDER BY product_id",(sale_id,)).fetchall()
+        for pid,q,ucost in items:
+            p=c.execute("SELECT quantity,unit_cost FROM inventory_products WHERE id=%s FOR UPDATE",(pid,)).fetchone()
+            newq=p[0]+q
+            # La pieza vuelve con su coste histórico; el promedio del producto se recalcula de forma ponderada.
+            newcost=(((p[0]*p[1])+(q*ucost))/newq).quantize(Decimal('0.01'))
+            c.execute("UPDATE inventory_products SET quantity=%s,unit_cost=%s,updated_at=NOW() WHERE id=%s",(newq,newcost,pid))
+            c.execute("""INSERT INTO inventory_movements(product_id,user_id,movement_type,quantity_delta,quantity_after,note,unit_cost_before,unit_cost_after,sale_id)
+                VALUES(%s,%s,'sale_void',%s,%s,%s,%s,%s,%s)""",(pid,u['id'],q,newq,f"Anulación de venta #{sale_id}: {d.reason.strip()}",p[1],newcost,sale_id))
+        c.execute("UPDATE sales SET status='voided',voided_by=%s,voided_at=NOW(),void_reason=%s WHERE id=%s",(u['id'],d.reason.strip(),sale_id))
+    return {"id":sale_id,"status":"voided","message":f"Venta #{sale_id} anulada. Las piezas volvieron al inventario."}
