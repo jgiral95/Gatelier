@@ -66,6 +66,28 @@ TEST_DATABASE_URL=postgresql://USUARIO@localhost:5432/gatelier_test python -m py
 
 Cubren unidades y fotos (fichas solo hasta las existencias, venta y anulación por unidad, bajas, ajustes bloqueados, migración de fotos, tipo y tamaño de imagen, qué ve el público), inversiones y depreciación (inicio, fin de vida útil, baja, valor de reventa, efecto en órdenes nuevas y no en las anteriores), el informe de costes con un escenario de cifras conocidas, ventas (stock, coste histórico, descuentos, doble envío, anulación y resumen del mes), permisos, roles, último administrador, cierre con consumos reales y defectuosas, órdenes por encargo, cierre doble, reapertura y su bloqueo, cancelación y que el catálogo público no exponga costes.
 
+## Respaldo y restauración de la base
+
+Copiar con `rsync` la carpeta del volumen de PostgreSQL mientras la base está en uso puede dejar una copia inconsistente. El respaldo diario del servidor debe hacer primero un volcado lógico, que incluye las fotos de las unidades:
+
+```
+docker compose --project-directory ~/gatelier exec -T db \
+  sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > gatelier-AAAA-MM-DD.dump
+```
+
+El script de respaldo del servidor lo guarda cada día en `/mnt/backup/gatelier-db/`, comprueba que se pueda leer con `pg_restore --list` y conserva 30 días.
+
+**Restaurar** (borra los datos actuales de la base: haz antes un volcado del estado actual):
+
+```
+docker compose --project-directory ~/gatelier stop api
+docker compose --project-directory ~/gatelier exec -T db \
+  sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists --no-owner' < gatelier-AAAA-MM-DD.dump
+docker compose --project-directory ~/gatelier start api
+```
+
+Para probar un respaldo sin tocar la base real, restáuralo en una base aparte (`createdb` dentro del contenedor) y revisa las tablas.
+
 ## Ejecución local
 
 Para un entorno local separado:
