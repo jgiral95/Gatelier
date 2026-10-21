@@ -76,3 +76,90 @@ def test_requiere_sesion(app_ready):
     anon = TestClient(app, base_url="https://testserver")
     assert anon.get("/expenses?month=2021-07").status_code == 401
     assert anon.post("/expenses", json={}).status_code in (401, 422)
+
+
+def material(client, quantity=0, unit_cost=0, unit="unidad"):
+    from conftest import unique
+    r = client.post("/inventory", json={"sku": unique("BOL"), "name": unique("Bolsa de papel"), "item_type": "raw_material",
+                                        "unit": unit, "quantity": quantity, "unit_cost": unit_cost})
+    assert r.status_code == 201, r.text
+    return r.json()
+
+
+def stock(client, pid):
+    p = next(p for p in client.get("/inventory").json()["items"] if p["id"] == pid)
+    return D(p["quantity"]), D(p["unit_cost"])
+
+
+def compra(client, pid, qty, amount, **kw):
+    body = {"expense_date": "2021-10-04", "category": "inventory", "description": "Bolsas kraft",
+            "amount": amount, "payment_method": "transfer", "inventory": {"product_id": pid, "quantity": qty}, **kw}
+    return client.post("/expenses", json=body)
+
+
+def test_compra_para_inventario_entra_al_stock_y_no_es_gasto(user, admin, db):
+    db.execute("DELETE FROM operating_expenses WHERE expense_date>='2021-10-01' AND expense_date<'2021-11-01' AND inventory_movement_id IS NULL")
+    db.commit()
+    m = material(user, quantity=10, unit_cost=500)
+    r = compra(user, m["id"], 50, 35000)
+    assert r.status_code == 201, r.text
+    e = r.json()
+    assert e["counts_as_expense"] is False and e["inventory"]["quantity"] is not None
+    assert D(e["inventory"]["unit_cost"]) == D(700)
+    # 10 × 500 + 50 × 700 = 40.000 / 60 = 666,67
+    assert stock(user, m["id"]) == (D(60), D("666.67"))
+    mov = next(x for x in user.get(f"/inventory/{m['id']}/movements").json()["items"] if x["id"] == e["inventory"]["movement_id"])
+    assert mov["type"] == "receipt" and mov["expense_id"] == e["id"] and not mov["receipt_allowed"]
+    # no suma a los gastos del mes ni a Costes, pero se informa aparte
+    d = user.get("/expenses?month=2021-10").json()["summary"]
+    assert all(c["category"] != "inventory" for c in d["by_category"])
+    assert D(d["inventory_purchases"]["total"]) >= D(35000)
+    rep = user.get("/costs/report?month=2021-10").json()
+    assert D(rep["expenses"]["total"]) == D(d["total"])
+
+
+def test_comprobante_de_la_compra_se_ve_en_el_movimiento(user):
+    import io
+    from PIL import Image
+    m = material(user)
+    e = compra(user, m["id"], 20, 14000).json()
+    b = io.BytesIO(); Image.new("RGB", (200, 300), (220, 220, 210)).save(b, "JPEG")
+    assert user.post(f"/expenses/{e['id']}/receipt", files={"file": ("c.jpg", b.getvalue(), "image/jpeg")}).status_code == 200
+    mov = next(x for x in user.get(f"/inventory/{m['id']}/movements").json()["items"] if x["id"] == e["inventory"]["movement_id"])
+    assert mov["receipt"] and mov["receipt"]["url"].startswith(f"/api/expenses/{e['id']}/receipt")
+    # el comprobante no se duplica en el movimiento
+    r = user.post(f"/movements/{mov['id']}/receipt", files={"file": ("c.jpg", b.getvalue(), "image/jpeg")})
+    assert r.status_code == 409
+
+
+def test_validaciones_de_compra(user):
+    m = material(user)
+    assert compra(user, m["id"], 2.5, 1000).status_code == 422          # unidad discreta
+    assert compra(user, 999999999, 2, 1000).status_code == 404
+    sin_art = {"expense_date": "2021-10-04", "category": "inventory", "description": "Bolsas", "amount": 1000}
+    assert user.post("/expenses", json=sin_art).status_code == 422
+    con_art_sin_cat = {**sin_art, "category": "marketing", "inventory": {"product_id": m["id"], "quantity": 1}}
+    assert user.post("/expenses", json=con_art_sin_cat).status_code == 422
+    term = user.post("/inventory", json={"sku": "T-" + m["sku"], "name": "Forro", "item_type": "finished_product",
+                                         "unit": "unidad", "quantity": 0, "unit_cost": 0}).json()
+    assert compra(user, term["id"], 1, 1000).status_code == 422
+    assert stock(user, m["id"]) == (D(0), D(0))  # nada quedó a medias
+
+
+def test_anular_compra_saca_del_inventario(user, admin):
+    m = material(user, quantity=10, unit_cost=500)
+    e = compra(user, m["id"], 50, 35000).json()
+    r = admin.post(f"/expenses/{e['id']}/void", json={"reason": "Factura equivocada"})
+    assert r.status_code == 200, r.text
+    assert stock(user, m["id"]) == (D(10), D(500))
+    movs = user.get(f"/inventory/{m['id']}/movements").json()["items"]
+    assert movs[0]["type"] == "purchase_void" and D(movs[0]["delta"]) == D(-50)
+
+
+def test_no_anula_si_ya_se_uso(user, admin):
+    m = material(user)
+    e = compra(user, m["id"], 30, 21000).json()
+    assert user.post(f"/inventory/{m['id']}/adjust", json={"delta": 25, "direction": "remove", "note": "Usadas"}).status_code == 200
+    r = admin.post(f"/expenses/{e['id']}/void", json={"reason": "Error"})
+    assert r.status_code == 409 and "quedan 5" in r.json()["detail"]
+    assert stock(user, m["id"])[0] == D(5)

@@ -166,12 +166,22 @@ async def lifespan(app):
             client_ref VARCHAR(64) UNIQUE,
             created_by BIGINT REFERENCES app_users(id), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())""")
         c.execute("CREATE INDEX IF NOT EXISTS operating_expenses_date_idx ON operating_expenses(expense_date)")
+        # Compras para el inventario registradas en Gastos: crean la entrada valorizada y quedan enlazadas a ella.
+        for col in ("inventory_product_id BIGINT REFERENCES inventory_products(id)","inventory_quantity NUMERIC(14,3)",
+                    "inventory_movement_id BIGINT REFERENCES inventory_movements(id)","inventory_void_movement_id BIGINT REFERENCES inventory_movements(id)"):
+            c.execute(f"ALTER TABLE operating_expenses ADD COLUMN IF NOT EXISTS {col}")
+        c.execute("ALTER TABLE operating_expenses DROP CONSTRAINT IF EXISTS operating_expenses_category_check")
+        c.execute("""ALTER TABLE operating_expenses ADD CONSTRAINT operating_expenses_category_check
+            CHECK(category IN ('inventory','packaging','shipping','marketing','fees','supplies','services','other'))""")
         # Comprobantes: una imagen (o PDF) por venta o gasto, guardada en la base como las fotos de las unidades.
         c.execute("""CREATE TABLE IF NOT EXISTS receipts(
-            id BIGSERIAL PRIMARY KEY, owner_type VARCHAR(10) NOT NULL CHECK(owner_type IN ('sale','expense')),
+            id BIGSERIAL PRIMARY KEY, owner_type VARCHAR(10) NOT NULL,
             owner_id BIGINT NOT NULL, content_type VARCHAR(40) NOT NULL, data BYTEA NOT NULL,
             uploaded_by BIGINT REFERENCES app_users(id), uploaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             UNIQUE(owner_type,owner_id))""")
+        # También las compras que entran al inventario (entradas). Se redefine la regla sin tocar las filas.
+        c.execute("ALTER TABLE receipts DROP CONSTRAINT IF EXISTS receipts_owner_type_check")
+        c.execute("ALTER TABLE receipts ADD CONSTRAINT receipts_owner_type_check CHECK(owner_type IN ('sale','expense','movement'))")
         # Unidades: cada pieza única de una referencia terminada, con sus propias fotos.
         c.execute("""CREATE TABLE IF NOT EXISTS product_units(
             id BIGSERIAL PRIMARY KEY, product_id BIGINT NOT NULL REFERENCES inventory_products(id),
@@ -259,6 +269,11 @@ def pack(r):
 DISCRETE_UNITS={"unidad","rollo","paquete"}
 def is_discrete_unit(unit:str)->bool:
     return (unit or "").strip().lower() in DISCRETE_UNITS
+def fmt_qty(v: Decimal) -> str:
+    """Cantidad legible en mensajes: sin ceros de más y con coma decimal."""
+    t=format(Decimal(v).normalize(),'f')
+    return t.replace('.',',')
+
 def require_integer_quantity(value:Decimal,unit:str,field_name:str="La cantidad"):
     if is_discrete_unit(unit) and value != value.to_integral_value():
         raise HTTPException(422,f"{field_name} debe ser un número entero cuando la unidad es {unit}.")
@@ -344,8 +359,17 @@ def _receipt_info(prefix: str, oid: int, packed: Optional[str]):
             "uploaded_by":who or None,"uploaded_at":datetime.fromtimestamp(int(ver)/1000,timezone.utc).isoformat()}
 
 RECEIPT_OWNERS={"sale":("sales","Venta no encontrada"),"expense":("operating_expenses","Gasto no encontrado")}
+# Movimientos de inventario que son compras o entradas: solo ellos llevan comprobante.
+RECEIPT_MOVEMENT_TYPES=("initial","receipt","add")
 
 def _receipt_owner(c, kind: str, oid: int, lock: bool=False):
+    if kind=="movement":
+        r=c.execute("SELECT movement_type FROM inventory_movements WHERE id=%s"+(" FOR UPDATE" if lock else ""),(oid,)).fetchone()
+        if not r: raise HTTPException(404,"Movimiento no encontrado")
+        if r[0] not in RECEIPT_MOVEMENT_TYPES: raise HTTPException(422,"Solo las entradas de inventario llevan comprobante")
+        if c.execute("SELECT 1 FROM operating_expenses WHERE inventory_movement_id=%s",(oid,)).fetchone():
+            raise HTTPException(409,"Esta entrada viene de una compra registrada en Gastos: su comprobante se gestiona allí")
+        return "active"
     table,missing=RECEIPT_OWNERS[kind]
     r=c.execute(f"SELECT status FROM {table} WHERE id=%s"+(" FOR UPDATE" if lock else ""),(oid,)).fetchone()
     if not r: raise HTTPException(404,missing)
@@ -399,6 +423,33 @@ def expense_receipt(exp_id: int, request: Request):
 @app.delete("/expenses/{exp_id}/receipt")
 def delete_expense_receipt(exp_id: int, request: Request):
     return _delete_receipt("expense",exp_id,request)
+
+@app.post("/movements/{mid}/receipt")
+async def upload_movement_receipt(mid: int, request: Request, file: UploadFile = File(...)):
+    return await _save_receipt("movement",mid,request,file)
+@app.get("/movements/{mid}/receipt")
+def movement_receipt(mid: int, request: Request):
+    return _get_receipt("movement",mid,request)
+@app.delete("/movements/{mid}/receipt")
+def delete_movement_receipt(mid: int, request: Request):
+    return _delete_receipt("movement",mid,request)
+
+MOV_RECEIPT_SQL="""COALESCE((SELECT 'movements|'||m.id||'|'||floor(extract(epoch FROM rc.uploaded_at)*1000)::bigint||'|'||rc.content_type||'|'||COALESCE(ru.username,'')
+     FROM receipts rc LEFT JOIN app_users ru ON ru.id=rc.uploaded_by WHERE rc.owner_type='movement' AND rc.owner_id=m.id),
+    (SELECT 'expenses|'||ex.id||'|'||floor(extract(epoch FROM rc.uploaded_at)*1000)::bigint||'|'||rc.content_type||'|'||COALESCE(ru.username,'')
+     FROM operating_expenses ex JOIN receipts rc ON rc.owner_type='expense' AND rc.owner_id=ex.id LEFT JOIN app_users ru ON ru.id=rc.uploaded_by
+     WHERE ex.inventory_movement_id=m.id),
+    (SELECT 'expenses|'||ex.id||'|' FROM operating_expenses ex WHERE ex.inventory_movement_id=m.id))"""
+
+def _movement_receipt(mid: int, mtype: str, packed: Optional[str]):
+    """Comprobante de un movimiento. Una compra registrada en Gastos muestra el comprobante del gasto."""
+    out={"receipt_allowed":mtype in RECEIPT_MOVEMENT_TYPES,"receipt":None,"expense_id":None}
+    if not packed: return out
+    prefix,oid,rest=packed.split('|',2)
+    if prefix=="expenses":
+        out["expense_id"]=int(oid); out["receipt_allowed"]=False  # se gestiona desde Gastos
+    out["receipt"]=_receipt_info(prefix,int(oid),rest) if rest else None
+    return out
 
 @app.get("/public/unit-photos/{uid}/{kind}")
 def public_unit_photo(uid: int, kind: Literal["closed","open"]):
@@ -734,26 +785,31 @@ def update_product(pid:int,d:ProductUpdate,request:Request):
         return pack(out)
     except UniqueViolation: raise HTTPException(409,"Ya existe un producto con esa referencia (SKU)")
 
+def _receive_into_stock(c, pid: int, quantity: Decimal, unit_cost: Decimal, note: str, user_id: int, allow_finished: bool=True):
+    """Entrada valorizada dentro de una transacción abierta: suma existencias y recalcula el coste promedio ponderado."""
+    r=c.execute("SELECT id,quantity,unit_cost,unit,item_type,name FROM inventory_products WHERE id=%s AND is_active FOR UPDATE",(pid,)).fetchone()
+    if not r: raise HTTPException(404,"Producto no encontrado")
+    if not allow_finished and r[4]=="finished_product":
+        raise HTTPException(422,"Los productos terminados entran por Producción, no como compra")
+    require_integer_quantity(quantity,r[3],"La cantidad recibida")
+    old_qty,old_cost=r[1],r[2]
+    new_qty=old_qty+quantity
+    if new_qty <= 0: raise HTTPException(422,"La cantidad resultante debe ser positiva")
+    # Mantiene precisión monetaria de dos decimales.
+    weighted=(((old_qty*old_cost)+(quantity*unit_cost))/new_qty).quantize(Decimal('0.01'))
+    c.execute("UPDATE inventory_products SET quantity=%s,unit_cost=%s,updated_at=NOW() WHERE id=%s",(new_qty,weighted,pid))
+    mid=c.execute("""INSERT INTO inventory_movements(product_id,user_id,movement_type,quantity_delta,quantity_after,note,unit_cost_before,unit_cost_after)
+    VALUES(%s,%s,'receipt',%s,%s,%s,%s,%s) RETURNING id""",(pid,user_id,quantity,new_qty,note,old_cost,weighted)).fetchone()[0]
+    return mid,old_cost,weighted,r
+
 @app.post("/inventory/{pid}/receive")
 def receive_stock(pid:int,d:Receipt,request:Request):
     """Registra una entrada valorizada y recalcula el coste promedio ponderado."""
     u=user_from(request)
     with psycopg.connect(DB) as c:
-        r=c.execute("SELECT id,quantity,unit_cost,unit FROM inventory_products WHERE id=%s AND is_active FOR UPDATE",(pid,)).fetchone()
-        if not r: raise HTTPException(404,"Producto no encontrado")
-        require_integer_quantity(d.quantity,r[3],"La cantidad recibida")
-        old_qty,old_cost=r[1],r[2]
-        new_qty=old_qty+d.quantity
-        if new_qty <= 0: raise HTTPException(422,"La cantidad resultante debe ser positiva")
-        weighted=((old_qty*old_cost)+(d.quantity*d.unit_cost))/new_qty
-        # Mantiene precisión monetaria de dos decimales.
-        weighted=weighted.quantize(Decimal('0.01'))
-        c.execute("UPDATE inventory_products SET quantity=%s,unit_cost=%s,updated_at=NOW() WHERE id=%s",(new_qty,weighted,pid))
-        note=d.note.strip() or "Entrada valorizada"
-        c.execute("""INSERT INTO inventory_movements(product_id,user_id,movement_type,quantity_delta,quantity_after,note,unit_cost_before,unit_cost_after)
-        VALUES(%s,%s,'receipt',%s,%s,%s,%s,%s)""",(pid,u['id'],d.quantity,new_qty,note,old_cost,weighted))
+        mid,old_cost,weighted,_=_receive_into_stock(c,pid,d.quantity,d.unit_cost,d.note.strip() or "Entrada valorizada",u['id'])
         out=c.execute(f"SELECT {PCOLS} FROM inventory_products WHERE id=%s",(pid,)).fetchone()
-    return {**pack(out),"receipt":{"quantity":d.quantity,"received_unit_cost":d.unit_cost,"previous_unit_cost":old_cost,"weighted_average_unit_cost":weighted}}
+    return {**pack(out),"movement_id":mid,"receipt":{"quantity":d.quantity,"received_unit_cost":d.unit_cost,"previous_unit_cost":old_cost,"weighted_average_unit_cost":weighted}}
 
 @app.post("/inventory/{pid}/adjust")
 def adjust(pid:int,d:Adjustment,request:Request):
@@ -778,8 +834,8 @@ def all_movements(request:Request,search:str=Query("",max_length=120),movement_t
     user_from(request)
     term=f"%{search.strip()}%"
     with psycopg.connect(DB) as c:
-        rows=c.execute("""SELECT m.id,m.movement_type,m.quantity_delta,m.quantity_after,m.note,m.created_at,
-            u.username,m.unit_cost_before,m.unit_cost_after,p.id,p.sku,p.name,p.unit
+        rows=c.execute(f"""SELECT m.id,m.movement_type,m.quantity_delta,m.quantity_after,m.note,m.created_at,
+            u.username,m.unit_cost_before,m.unit_cost_after,p.id,p.sku,p.name,p.unit,{MOV_RECEIPT_SQL}
             FROM inventory_movements m
             JOIN inventory_products p ON p.id=m.product_id
             LEFT JOIN app_users u ON u.id=m.user_id
@@ -788,19 +844,21 @@ def all_movements(request:Request,search:str=Query("",max_length=120),movement_t
               AND (%s='all' OR m.movement_type=%s)
             ORDER BY m.created_at DESC,m.id DESC LIMIT 1000""",
             (product_id,product_id,search.strip(),term,term,term,term,movement_type,movement_type)).fetchall()
-    labels={"initial":"Existencia inicial","receipt":"Entrada valorizada","add":"Entrada manual","remove":"Salida manual","production_consumption":"Consumo de producción","production_output":"Producto terminado de producción","production_reversal":"Reversión de producción","sale":"Venta","sale_void":"Venta anulada"}
+    labels={"initial":"Existencia inicial","receipt":"Entrada valorizada","add":"Entrada manual","remove":"Salida manual","production_consumption":"Consumo de producción","production_output":"Producto terminado de producción","production_reversal":"Reversión de producción","sale":"Venta","sale_void":"Venta anulada","purchase_void":"Compra anulada"}
     return {"items":[{"id":r[0],"type":r[1],"type_label":labels.get(r[1],r[1].replace('_',' ').capitalize()),
         "delta":r[2],"quantity_after":r[3],"note":r[4],"created_at":r[5],"username":r[6],
-        "unit_cost_before":r[7],"unit_cost_after":r[8],"product_id":r[9],"sku":r[10],"product_name":r[11],"unit":r[12]} for r in rows]}
+        "unit_cost_before":r[7],"unit_cost_after":r[8],"product_id":r[9],"sku":r[10],"product_name":r[11],"unit":r[12],
+        **_movement_receipt(r[0],r[1],r[13])} for r in rows]}
 
 @app.get("/inventory/{pid}/movements")
 def movements(pid:int,request:Request):
     user_from(request)
     with psycopg.connect(DB) as c:
         if not c.execute("SELECT 1 FROM inventory_products WHERE id=%s AND is_active",(pid,)).fetchone():raise HTTPException(404,"Producto no encontrado")
-        rows=c.execute("""SELECT m.id,m.movement_type,m.quantity_delta,m.quantity_after,m.note,m.created_at,u.username,m.unit_cost_before,m.unit_cost_after
-        FROM inventory_movements m LEFT JOIN app_users u ON u.id=m.user_id WHERE m.product_id=%s ORDER BY m.created_at DESC LIMIT 100""",(pid,)).fetchall()
-    return {"items":[{"id":r[0],"type":r[1],"delta":r[2],"quantity_after":r[3],"note":r[4],"created_at":r[5],"username":r[6],"unit_cost_before":r[7],"unit_cost_after":r[8]} for r in rows]}
+        rows=c.execute(f"""SELECT m.id,m.movement_type,m.quantity_delta,m.quantity_after,m.note,m.created_at,u.username,m.unit_cost_before,m.unit_cost_after,
+        {MOV_RECEIPT_SQL} FROM inventory_movements m LEFT JOIN app_users u ON u.id=m.user_id WHERE m.product_id=%s ORDER BY m.created_at DESC LIMIT 100""",(pid,)).fetchall()
+    return {"items":[{"id":r[0],"type":r[1],"delta":r[2],"quantity_after":r[3],"note":r[4],"created_at":r[5],"username":r[6],"unit_cost_before":r[7],"unit_cost_after":r[8],
+        **_movement_receipt(r[0],r[1],r[9])} for r in rows]}
 
 
 # ------------------------- PRODUCCIÓN Y COSTES -------------------------
@@ -1422,7 +1480,7 @@ def costs_report(request: Request, month: str = Query(..., pattern=r"^\d{4}-\d{2
             FROM sales WHERE status='completed' AND sale_date>=%s AND sale_date<%s GROUP BY 1""",(first,end)).fetchall()
         tmap={r[0]:r for r in trend_rows}
         emap={r[0]:r[1] for r in c.execute("""SELECT date_trunc('month',expense_date)::date,SUM(amount) FROM operating_expenses
-            WHERE status='active' AND expense_date>=%s AND expense_date<%s GROUP BY 1""",(first,end)).fetchall()}
+            WHERE status='active' AND category<>'inventory' AND expense_date>=%s AND expense_date<%s GROUP BY 1""",(first,end)).fetchall()}
         trend=[]
         for i in range(6):
             m=_shift_month(first,i); r=tmap.get(m)
@@ -1592,16 +1650,24 @@ def retire_investment(inv_id: int, d: InvestmentRetire, request: Request):
 # ----------------------------- GASTOS DEL NEGOCIO -----------------------------
 # Lo que cuesta vender y operar sin ser parte de fabricar: no entra al coste de las piezas,
 # se resta del margen del mes para ver la ganancia. Lo que se gasta fabricando va en Producción.
-EXPENSE_CATEGORIES={"packaging":"Empaque","shipping":"Envíos y transporte","marketing":"Publicidad",
+# Excepción: una «Compra para el inventario» se registra aquí con su comprobante, pero entra al
+# inventario como entrada valorizada y NO cuenta como gasto del mes: su coste se reconoce cuando
+# el material se usa en una pieza que se vende. Así no se cuenta dos veces.
+EXPENSE_CATEGORIES={"inventory":"Compra para el inventario","packaging":"Empaque","shipping":"Envíos y transporte","marketing":"Publicidad",
     "fees":"Comisiones y bancos","supplies":"Papelería e insumos","services":"Servicios e internet","other":"Otro"}
+ExpenseCategory=Literal["inventory","packaging","shipping","marketing","fees","supplies","services","other"]
 
+class ExpenseInventory(BaseModel):
+    product_id: int
+    quantity: Decimal = Field(gt=0, le=999999999)
 class ExpenseInput(BaseModel):
     expense_date: date
-    category: Literal["packaging","shipping","marketing","fees","supplies","services","other"]
+    category: ExpenseCategory
     description: str = Field(min_length=2, max_length=160)
     amount: Decimal = Field(gt=0, le=999999999)
     payment_method: Literal["cash","transfer"] = "cash"
     note: str = Field(default="", max_length=1000)
+    inventory: Optional[ExpenseInventory] = None
     client_ref: Optional[str] = Field(default=None, min_length=8, max_length=64, pattern=r"^[A-Za-z0-9-]+$")
 class ExpenseVoid(BaseModel):
     reason: str = Field(min_length=3, max_length=500)
@@ -1609,17 +1675,26 @@ class ExpenseVoid(BaseModel):
 EXP_COLUMNS="""e.id,e.expense_date,e.category,e.description,e.amount,e.payment_method,e.note,e.status,e.void_reason,
     cu.username,e.created_at,vu.username,e.voided_at,
     (SELECT floor(extract(epoch FROM rc.uploaded_at)*1000)::bigint||'|'||rc.content_type||'|'||COALESCE(ru.username,'')
-     FROM receipts rc LEFT JOIN app_users ru ON ru.id=rc.uploaded_by WHERE rc.owner_type='expense' AND rc.owner_id=e.id)"""
-EXP_FROM="""FROM operating_expenses e LEFT JOIN app_users cu ON cu.id=e.created_by LEFT JOIN app_users vu ON vu.id=e.voided_by"""
+     FROM receipts rc LEFT JOIN app_users ru ON ru.id=rc.uploaded_by WHERE rc.owner_type='expense' AND rc.owner_id=e.id),
+    e.inventory_product_id,e.inventory_quantity,e.inventory_movement_id,ip.sku,ip.name,ip.unit"""
+EXP_FROM="""FROM operating_expenses e LEFT JOIN app_users cu ON cu.id=e.created_by LEFT JOIN app_users vu ON vu.id=e.voided_by
+    LEFT JOIN inventory_products ip ON ip.id=e.inventory_product_id"""
 
 def _expense_dict(r):
+    inv=None
+    if r[14]:
+        inv={"product_id":r[14],"quantity":r[15],"movement_id":r[16],"sku":r[17],"name":r[18],"unit":r[19],
+             "unit_cost":(r[4]/r[15]).quantize(Q2) if r[15] else None}
     return {"id":r[0],"expense_date":r[1].isoformat(),"category":r[2],"category_label":EXPENSE_CATEGORIES.get(r[2],r[2]),
         "description":r[3],"amount":r[4],"payment_method":r[5],"note":r[6],"status":r[7],"void_reason":r[8],
-        "created_by":r[9],"created_at":r[10],"voided_by":r[11],"voided_at":r[12],"receipt":_receipt_info("expenses",r[0],r[13])}
+        "created_by":r[9],"created_at":r[10],"voided_by":r[11],"voided_at":r[12],"receipt":_receipt_info("expenses",r[0],r[13]),
+        "inventory":inv,"counts_as_expense":r[2]!="inventory"}
 
 def _expenses_by_category(c, start: date, end: date):
+    """Gastos del negocio vigentes del periodo, sin las compras para el inventario."""
     rows=c.execute("""SELECT category,COUNT(*),SUM(amount) FROM operating_expenses
-        WHERE status='active' AND expense_date>=%s AND expense_date<%s GROUP BY category ORDER BY SUM(amount) DESC""",(start,end)).fetchall()
+        WHERE status='active' AND category<>'inventory' AND expense_date>=%s AND expense_date<%s
+        GROUP BY category ORDER BY SUM(amount) DESC""",(start,end)).fetchall()
     cats=[{"category":r[0],"label":EXPENSE_CATEGORIES.get(r[0],r[0]),"count":r[1],"amount":r[2]} for r in rows]
     return cats,sum((x["amount"] for x in cats),Decimal(0))
 
@@ -1631,16 +1706,21 @@ def list_expenses(request: Request, month: str = Query(..., pattern=r"^\d{4}-\d{
         rows=c.execute(f"""SELECT {EXP_COLUMNS} {EXP_FROM} WHERE e.expense_date>=%s AND e.expense_date<%s
             ORDER BY e.expense_date DESC, e.id DESC""",(start,end)).fetchall()
         cats,total=_expenses_by_category(c,start,end)
-        prev_start=_shift_month(start,-1)
-        _,prev_total=_expenses_by_category(c,prev_start,start)
+        _,prev_total=_expenses_by_category(c,_shift_month(start,-1),start)
+        purchases=c.execute("""SELECT COUNT(*),COALESCE(SUM(amount),0) FROM operating_expenses
+            WHERE status='active' AND category='inventory' AND expense_date>=%s AND expense_date<%s""",(start,end)).fetchone()
     return {"month":month,"items":[_expense_dict(r) for r in rows],"categories":EXPENSE_CATEGORIES,
-            "summary":{"total":total,"count":sum(x["count"] for x in cats),"by_category":cats,"previous_month_total":prev_total}}
+            "summary":{"total":total,"count":sum(x["count"] for x in cats),"by_category":cats,"previous_month_total":prev_total,
+                       "inventory_purchases":{"count":purchases[0],"total":purchases[1]}}}
 
 @app.post("/expenses", status_code=201)
 def create_expense(d: ExpenseInput, request: Request):
-    """Cualquier cuenta del equipo registra gastos; solo un administrador los anula."""
+    """Cualquier cuenta del equipo registra gastos; solo un administrador los anula.
+    Una compra para el inventario crea, en la misma transacción, la entrada valorizada del artículo."""
     u=user_from(request)
     if d.expense_date>local_today(): raise HTTPException(422,"La fecha del gasto no puede estar en el futuro")
+    if d.category=="inventory" and not d.inventory: raise HTTPException(422,"Elige el artículo del inventario y la cantidad comprada")
+    if d.category!="inventory" and d.inventory: raise HTTPException(422,"Solo una compra para el inventario lleva artículo y cantidad")
     with psycopg.connect(DB) as c:
         if d.client_ref:
             prev=c.execute("SELECT id FROM operating_expenses WHERE client_ref=%s",(d.client_ref,)).fetchone()
@@ -1652,18 +1732,50 @@ def create_expense(d: ExpenseInput, request: Request):
             (d.expense_date,d.category,d.description.strip(),d.amount,d.payment_method,d.note.strip(),d.client_ref,u['id'])).fetchone()
         if not eid:
             eid=c.execute("SELECT id FROM operating_expenses WHERE client_ref=%s",(d.client_ref,)).fetchone()
+            r=c.execute(f"SELECT {EXP_COLUMNS} {EXP_FROM} WHERE e.id=%s",(eid[0],)).fetchone()
+            return {**_expense_dict(r),"duplicate":True}
+        if d.inventory:
+            unit_cost=d.amount/d.inventory.quantity
+            mid,_,_,_=_receive_into_stock(c,d.inventory.product_id,d.inventory.quantity,unit_cost,
+                f"Compra registrada en Gastos: {d.description.strip()}"[:500],u['id'],allow_finished=False)
+            c.execute("""UPDATE operating_expenses SET inventory_product_id=%s,inventory_quantity=%s,inventory_movement_id=%s WHERE id=%s""",
+                      (d.inventory.product_id,d.inventory.quantity,mid,eid[0]))
         r=c.execute(f"SELECT {EXP_COLUMNS} {EXP_FROM} WHERE e.id=%s",(eid[0],)).fetchone()
     return _expense_dict(r)
 
 @app.post("/expenses/{exp_id}/void")
 def void_expense(exp_id: int, d: ExpenseVoid, request: Request):
-    """Anula un gasto registrado por error. Se conserva con el motivo y deja de contar."""
+    """Anula un gasto registrado por error. Se conserva con el motivo y deja de contar.
+    Si era una compra para el inventario, saca del inventario lo que había entrado y deshace su efecto en el coste promedio."""
     u=require_admin(request)
     with psycopg.connect(DB) as c:
-        cur=c.execute("SELECT status FROM operating_expenses WHERE id=%s FOR UPDATE",(exp_id,)).fetchone()
+        cur=c.execute("SELECT status,inventory_product_id,inventory_quantity,amount,description FROM operating_expenses WHERE id=%s FOR UPDATE",(exp_id,)).fetchone()
         if not cur: raise HTTPException(404,"Gasto no encontrado")
         if cur[0]=="voided": raise HTTPException(409,"Este gasto ya está anulado")
-        c.execute("UPDATE operating_expenses SET status='voided',void_reason=%s,voided_by=%s,voided_at=NOW() WHERE id=%s",
-                  (d.reason.strip(),u['id'],exp_id))
+        void_mid=None; message="Gasto anulado. Ya no cuenta en Costes."
+        if cur[1]:
+            p=c.execute("SELECT quantity,unit_cost,unit,name,item_type FROM inventory_products WHERE id=%s FOR UPDATE",(cur[1],)).fetchone()
+            qty=cur[2]
+            if p[0]<qty:
+                raise HTTPException(409,f"No se puede anular: de esta compra entraron {fmt_qty(qty)} {p[2]} de {p[3]} y en el inventario quedan {fmt_qty(p[0])}. "
+                                        "Corrige primero las existencias con un ajuste trazable.")
+            new_qty=p[0]-qty
+            mv=c.execute("SELECT inventory_movement_id FROM operating_expenses WHERE id=%s",(exp_id,)).fetchone()[0]
+            later=c.execute("SELECT 1 FROM inventory_movements WHERE product_id=%s AND id>%s LIMIT 1",(cur[1],mv)).fetchone()
+            if not later:
+                # Nada se movió después de la compra: se vuelve exactamente al coste que había antes.
+                new_cost=c.execute("SELECT unit_cost_before FROM inventory_movements WHERE id=%s",(mv,)).fetchone()[0]
+            elif new_qty>0:
+                # Deshace la compra en el promedio ponderado: (valor actual − valor comprado) ÷ lo que queda.
+                new_cost=max(Decimal(0),((p[0]*p[1])-cur[3])/new_qty).quantize(Q2)
+            else:
+                new_cost=p[1]
+            c.execute("UPDATE inventory_products SET quantity=%s,unit_cost=%s,updated_at=NOW() WHERE id=%s",(new_qty,new_cost,cur[1]))
+            void_mid=c.execute("""INSERT INTO inventory_movements(product_id,user_id,movement_type,quantity_delta,quantity_after,note,unit_cost_before,unit_cost_after)
+                VALUES(%s,%s,'purchase_void',%s,%s,%s,%s,%s) RETURNING id""",(cur[1],u['id'],-qty,new_qty,
+                f"Compra anulada en Gastos: {cur[4]} · {d.reason.strip()}"[:500],p[1],new_cost)).fetchone()[0]
+            message=f"Compra anulada. Salieron {fmt_qty(qty)} {p[2]} de {p[3]} del inventario."
+        c.execute("""UPDATE operating_expenses SET status='voided',void_reason=%s,voided_by=%s,voided_at=NOW(),inventory_void_movement_id=%s
+            WHERE id=%s""",(d.reason.strip(),u['id'],void_mid,exp_id))
         r=c.execute(f"SELECT {EXP_COLUMNS} {EXP_FROM} WHERE e.id=%s",(exp_id,)).fetchone()
-    return {**_expense_dict(r),"message":"Gasto anulado. Ya no cuenta en Costes."}
+    return {**_expense_dict(r),"message":message}

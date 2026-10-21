@@ -91,3 +91,29 @@ def test_privado(user, app_ready):
     anon = TestClient(app, base_url="https://testserver")
     assert anon.get(f"/sales/{s['id']}/receipt").status_code == 401
     assert anon.post(f"/sales/{s['id']}/receipt", files={"file": ("c.jpg", img(), "image/jpeg")}).status_code == 401
+
+
+def test_entrada_de_inventario_con_comprobante(user, admin):
+    from conftest import unique
+    r = user.post("/inventory", json={"sku": unique("BOL"), "name": "Bolsa de papel", "item_type": "raw_material",
+                                      "unit": "unidad", "quantity": 0, "unit_cost": 0})
+    assert r.status_code == 201, r.text
+    pid = r.json()["id"]
+    rec = user.post(f"/inventory/{pid}/receive", json={"quantity": 50, "unit_cost": 700, "note": "Compra papelería"})
+    assert rec.status_code == 200, rec.text
+    mid = rec.json()["movement_id"]
+    assert up(user, f"/movements/{mid}/receipt", img()).status_code == 200
+    mov = next(m for m in user.get(f"/inventory/{pid}/movements").json()["items"] if m["id"] == mid)
+    assert mov["receipt_allowed"] and mov["receipt"]["content_type"] == "image/jpeg"
+    glob = next(m for m in user.get(f"/movements?product_id={pid}").json()["items"] if m["id"] == mid)
+    assert glob["receipt"]["url"] == mov["receipt"]["url"]
+    assert user.get(mov["receipt"]["url"].removeprefix("/api")).status_code == 200
+    # una salida no lleva comprobante
+    out = user.post(f"/inventory/{pid}/adjust", json={"delta": 2, "direction": "remove", "note": "Se dañaron"})
+    assert out.status_code == 200, out.text
+    salida = next(m for m in user.get(f"/inventory/{pid}/movements").json()["items"] if m["type"] != "receipt")
+    assert not salida["receipt_allowed"]
+    assert up(user, f"/movements/{salida['id']}/receipt", img()).status_code == 422
+    assert up(user, "/movements/999999999/receipt", img()).status_code == 404
+    assert user.delete(f"/movements/{mid}/receipt").status_code == 403
+    assert admin.delete(f"/movements/{mid}/receipt").status_code == 200
