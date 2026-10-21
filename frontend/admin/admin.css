@@ -123,6 +123,10 @@ td .actions{flex-wrap:nowrap}
 .uslotimg .hint{font-size:11px}
 .slotactions{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .slotup{cursor:pointer}
+.resbox{background:var(--info-soft);color:var(--ink);border-radius:6px;padding:8px 10px;font-size:13px;line-height:1.5}
+.resform{display:grid;gap:6px;margin-top:12px;color:var(--ink)}
+.resform label{font-weight:600;font-size:13px;margin-top:4px}
+.resform input,.resform select{width:100%;min-height:42px;border:1px solid #c9cfc6;border-radius:6px;padding:9px 12px;background:#fff}
 .unitfoot{display:flex;flex-wrap:wrap;gap:6px;border-top:1px solid var(--line-soft);padding-top:10px}
 .unitsgone{margin-top:18px}.unitsgone summary{cursor:pointer;font-weight:600;color:var(--forest)}
 

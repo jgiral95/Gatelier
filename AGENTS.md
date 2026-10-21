@@ -23,7 +23,7 @@ Mantener y desarrollar Gatelier, una aplicación de gestión para un atelier tex
 - Frontend: HTML/CSS/JavaScript estático.
 - Nginx sirve el frontend y hace proxy de `/api/` al servicio `api:8000`.
 - Docker Compose.
-- Dominio conocido: `https://gatelier.jgiral95.casa` vía Cloudflare Tunnel.
+- Dominio principal: `https://gatelier.online` (y `www`) vía Cloudflare Tunnel; `https://gatelier.jgiral95.casa` sigue como dominio anterior.
 - Puerto de frontend del host: normalmente 8085.
 - API en puerto interno 8000; no mapear `8000:8000` en el host.
 - El usuario ha descrito la carpeta del servidor como `~/gatelier`, pero confirmar en el entorno real.

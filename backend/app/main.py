@@ -164,6 +164,10 @@ async def lifespan(app):
             created_by BIGINT REFERENCES app_users(id), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())""")
         c.execute("CREATE INDEX IF NOT EXISTS product_units_product_idx ON product_units(product_id,status)")
+        # Reservas: una pieza disponible puede apartarse para un cliente hasta una fecha; al vencer vuelve sola a la tienda.
+        for col in ("reserved_until TIMESTAMPTZ","reserved_for VARCHAR(160) NOT NULL DEFAULT ''","reserved_contact VARCHAR(160) NOT NULL DEFAULT ''",
+                    "reserved_note TEXT NOT NULL DEFAULT ''","reserved_by BIGINT REFERENCES app_users(id)","reserved_at TIMESTAMPTZ"):
+            c.execute(f"ALTER TABLE product_units ADD COLUMN IF NOT EXISTS {col}")
         c.execute("""CREATE TABLE IF NOT EXISTS unit_photos(
             unit_id BIGINT NOT NULL REFERENCES product_units(id) ON DELETE CASCADE,
             kind VARCHAR(10) NOT NULL CHECK(kind IN ('closed','open')),
@@ -222,6 +226,7 @@ PHOTO_KINDS={"closed":"Cerrado","open":"Abierto"}
 PCOLS="""id,sku,name,item_type,category,unit,quantity,min_stock,unit_cost,sale_price,notes,updated_at,size_code,
     (SELECT COUNT(*) FROM product_units pu WHERE pu.product_id=inventory_products.id AND pu.status='available'),
     (SELECT COUNT(*) FROM product_units pu WHERE pu.product_id=inventory_products.id AND pu.status='available'
+        AND (pu.reserved_until IS NULL OR pu.reserved_until<=NOW())
         AND EXISTS(SELECT 1 FROM unit_photos up WHERE up.unit_id=pu.id AND up.kind='closed')),
     (SELECT pu.id::text||':'||floor(extract(epoch FROM up.updated_at))::bigint FROM product_units pu JOIN unit_photos up ON up.unit_id=pu.id
         WHERE pu.product_id=inventory_products.id AND pu.status='available' AND up.kind='closed' ORDER BY pu.id LIMIT 1)"""
@@ -294,6 +299,7 @@ def public_catalog():
         units=c.execute(f"""SELECT pu.product_id,pu.id,pu.code,pu.name,{UNIT_PHOTOS_JSON} FROM product_units pu
             JOIN inventory_products p ON p.id=pu.product_id
             WHERE pu.status='available' AND p.is_active AND p.item_type='finished_product' AND p.quantity>0
+              AND (pu.reserved_until IS NULL OR pu.reserved_until<=NOW())
               AND EXISTS(SELECT 1 FROM unit_photos up WHERE up.unit_id=pu.id AND up.kind='closed')
             ORDER BY pu.id""").fetchall()
     styles={}
@@ -319,13 +325,18 @@ def public_unit_photo(uid: int, kind: Literal["closed","open"]):
     return Response(content=bytes(r[1]),media_type=r[0],headers={"Cache-Control":"public, max-age=86400"})
 
 # ------------------------------- UNIDADES -------------------------------
-UNIT_STATUS={"available":"Disponible","sold":"Vendida","removed":"Dada de baja"}
+UNIT_STATUS={"available":"Disponible","sold":"Vendida","removed":"Dada de baja","reserved":"Reservada"}
 class UnitCreate(BaseModel):
     name: str = Field(default="", max_length=120)
 class UnitUpdate(BaseModel):
     name: str = Field(default="", max_length=120)
 class UnitRemove(BaseModel):
     reason: str = Field(min_length=3, max_length=500)
+class UnitReserve(BaseModel):
+    customer: str = Field(min_length=2, max_length=160)
+    contact: str = Field(default="", max_length=160)
+    hours: int = Field(default=48, ge=1, le=336)
+    note: str = Field(default="", max_length=500)
 
 def _units_fit(c, pid, new_quantity, available_after=None):
     """Nunca puede haber más unidades disponibles identificadas que existencias."""
@@ -336,13 +347,17 @@ def _units_fit(c, pid, new_quantity, available_after=None):
 
 def _unit_rows(c, pid=None, uid=None):
     where="pu.product_id=%s" if pid is not None else "pu.id=%s"
-    return c.execute(f"""SELECT pu.id,pu.product_id,pu.code,pu.name,pu.status,pu.sale_id,pu.removed_reason,pu.created_at,cu.username,{UNIT_PHOTOS_JSON}
-        FROM product_units pu LEFT JOIN app_users cu ON cu.id=pu.created_by WHERE {where}
+    return c.execute(f"""SELECT pu.id,pu.product_id,pu.code,pu.name,pu.status,pu.sale_id,pu.removed_reason,pu.created_at,cu.username,{UNIT_PHOTOS_JSON},
+        pu.reserved_until,pu.reserved_until>NOW(),pu.reserved_for,pu.reserved_contact,pu.reserved_note,ru.username,pu.reserved_at
+        FROM product_units pu LEFT JOIN app_users cu ON cu.id=pu.created_by LEFT JOIN app_users ru ON ru.id=pu.reserved_by WHERE {where}
         ORDER BY (pu.status='available') DESC, pu.id DESC""",(pid if pid is not None else uid,)).fetchall()
 
 def _unit_dict(r):
-    return {"id":r[0],"product_id":r[1],"code":r[2],"name":r[3],"status":r[4],"status_label":UNIT_STATUS.get(r[4],r[4]),
-            "sale_id":r[5],"removed_reason":r[6],"created_at":r[7],"created_by":r[8],"photos":unit_photo_urls(r[0],r[9])}
+    reserved=r[4]=='available' and bool(r[11])
+    shown='reserved' if reserved else r[4]
+    return {"id":r[0],"product_id":r[1],"code":r[2],"name":r[3],"status":r[4],"shown_status":shown,"status_label":UNIT_STATUS.get(shown,shown),
+            "sale_id":r[5],"removed_reason":r[6],"created_at":r[7],"created_by":r[8],"photos":unit_photo_urls(r[0],r[9]),
+            "reservation":({"until":r[10],"customer":r[12],"contact":r[13],"note":r[14],"by":r[15],"at":r[16]} if reserved else None)}
 
 def _units_payload(c, pid):
     p=c.execute(f"SELECT {PCOLS} FROM inventory_products WHERE id=%s",(pid,)).fetchone()
@@ -414,6 +429,30 @@ def remove_unit(uid: int, d: UnitRemove, request: Request):
             VALUES(%s,%s,'remove',-1,%s,%s,%s,%s)""",(r[1],u['id'],newq,f"Unidad {r[2]} dada de baja: {d.reason.strip()}",p[1],p[1]))
         c.execute("UPDATE product_units SET status='removed',removed_reason=%s,updated_at=NOW() WHERE id=%s",(d.reason.strip(),uid))
         return {**_units_payload(c,r[1]),"message":f"Unidad {r[2]} dada de baja y descontada del inventario"}
+
+@app.post("/units/{uid}/reserve")
+def reserve_unit(uid: int, d: UnitReserve, request: Request):
+    """Aparta una pieza para un cliente. Mientras la reserva esté vigente no se muestra en la tienda.
+    Volver a reservarla actualiza el cliente o el plazo."""
+    u=user_from(request)
+    with psycopg.connect(DB) as c:
+        r=_lock_unit(c,uid)
+        if r[3]!='available': raise HTTPException(409,"Solo se pueden reservar unidades disponibles")
+        c.execute("""UPDATE product_units SET reserved_until=NOW()+make_interval(hours=>%s),reserved_for=%s,reserved_contact=%s,
+            reserved_note=%s,reserved_by=%s,reserved_at=NOW(),updated_at=NOW() WHERE id=%s""",
+            (d.hours,d.customer.strip(),d.contact.strip(),d.note.strip(),u['id'],uid))
+        return {**_units_payload(c,r[1]),"message":f"{r[2]} reservada para {d.customer.strip()} por {d.hours} h. No se muestra en la tienda mientras tanto."}
+
+@app.delete("/units/{uid}/reserve")
+def release_unit(uid: int, request: Request):
+    user_from(request)
+    with psycopg.connect(DB) as c:
+        r=_lock_unit(c,uid)
+        if not c.execute("SELECT 1 FROM product_units WHERE id=%s AND reserved_until>NOW()",(uid,)).fetchone():
+            raise HTTPException(409,"Esta unidad no tiene una reserva vigente")
+        c.execute("""UPDATE product_units SET reserved_until=NULL,reserved_for='',reserved_contact='',reserved_note='',
+            reserved_by=NULL,reserved_at=NULL,updated_at=NOW() WHERE id=%s""",(uid,))
+        return {**_units_payload(c,r[1]),"message":f"Reserva de {r[2]} liberada. Vuelve a verse en la tienda."}
 
 @app.post("/units/{uid}/photos/{kind}")
 async def upload_unit_photo(uid: int, kind: Literal["closed","open"], request: Request, file: UploadFile = File(...)):
@@ -1068,9 +1107,11 @@ def sales_options(request: Request):
         rows=c.execute("""SELECT id,sku,name,unit,quantity,sale_price,size_code FROM inventory_products
             WHERE is_active AND item_type='finished_product' ORDER BY name""").fetchall()
         units={}
-        for pid,uid,code,name,ph in c.execute(f"""SELECT pu.product_id,pu.id,pu.code,pu.name,{UNIT_PHOTOS_JSON} FROM product_units pu
-                WHERE pu.status='available' ORDER BY pu.id""").fetchall():
-            units.setdefault(pid,[]).append({"id":uid,"code":code,"name":name,"photos":unit_photo_urls(uid,ph)})
+        for pid,uid,code,name,ph,rfor,runtil in c.execute(f"""SELECT pu.product_id,pu.id,pu.code,pu.name,{UNIT_PHOTOS_JSON},
+                CASE WHEN pu.reserved_until>NOW() THEN pu.reserved_for END, CASE WHEN pu.reserved_until>NOW() THEN pu.reserved_until END
+                FROM product_units pu WHERE pu.status='available' ORDER BY pu.id""").fetchall():
+            units.setdefault(pid,[]).append({"id":uid,"code":code,"name":name,"photos":unit_photo_urls(uid,ph),
+                                             "reserved_for":rfor,"reserved_until":runtil})
     return {"products":[{"id":r[0],"sku":r[1],"name":r[2],"unit":r[3],"quantity":r[4],"sale_price":r[5],"size_code":r[6],
                          "units":units.get(r[0],[])} for r in rows],
             "channels":SALE_CHANNELS,"payment_methods":PAYMENT_METHODS}
@@ -1163,7 +1204,8 @@ def create_sale(d: SaleCreate, request: Request, response: Response):
         except UniqueViolation:
             raise HTTPException(409,"Esta venta ya se estaba registrando. Actualiza la lista para verla.")
         for pid,q,price,line,ucost,lcost,unit_ids in lines:
-            if unit_ids: c.execute("UPDATE product_units SET status='sold',sale_id=%s,updated_at=NOW() WHERE id=ANY(%s)",(sid,unit_ids))
+            if unit_ids: c.execute("""UPDATE product_units SET status='sold',sale_id=%s,reserved_until=NULL,reserved_for='',reserved_contact='',
+                reserved_note='',reserved_by=NULL,reserved_at=NULL,updated_at=NOW() WHERE id=ANY(%s)""",(sid,unit_ids))
             c.execute("INSERT INTO sale_items(sale_id,product_id,quantity,unit_price,line_total,unit_cost,line_cost) VALUES(%s,%s,%s,%s,%s,%s,%s)",(sid,pid,q,price,line,ucost,lcost))
             newq=prods[pid][3]-q
             c.execute("UPDATE inventory_products SET quantity=%s,updated_at=NOW() WHERE id=%s",(newq,pid))

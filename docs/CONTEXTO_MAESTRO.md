@@ -13,7 +13,7 @@ Gatelier es una aplicación privada de gestión de un atelier textil consciente.
 ## Infraestructura descrita por el usuario
 - SSH alias: `gatelier`; usuario/host vistos en registros: `jgiral95@server`.
 - Carpeta de proyecto: `~/gatelier`.
-- Dominio: `https://gatelier.jgiral95.casa`.
+- Dominio: `https://gatelier.online` (antes `https://gatelier.jgiral95.casa`).
 - Frontend en host port 8085.
 - API FastAPI en port 8000 interno de Docker.
 - Portainer usa host port 8000, por tanto no publicar la API en ese puerto.

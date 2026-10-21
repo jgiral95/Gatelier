@@ -25,6 +25,7 @@ El archivo `gatelier_db.sql` del ZIP contiene filas de tablas de usuarios, inven
 - `/admin/`: panel administrativo actual, con inventario, producción, movimientos y usuarios.
 - `/api/public/catalog`: lectura pública limitada a nombre, unidad, precio y disponibilidad. No expone costes, notas internas ni cantidades exactas de stock.
 - `frontend/assets/products/`: fotografías de la galería pública, con recorte limpio y formato WebP optimizado.
+- `frontend/assets/og-gatelier.jpg`: imagen de vista previa (1200 × 630) que muestran WhatsApp, Instagram y otras apps al compartir un enlace. Las etiquetas Open Graph usan URLs absolutas de `https://gatelier.online`.
 - `frontend/assets/cats/`: fotos de los siete gatos del atelier para la sección «Los supervisores de cada lote».
 
 La portada incluye una guía de tallas a escala con las medidas del forro (ancho × alto): XS 16 × 23, S 19 × 26, M 22 × 30, L 24 × 32 y XL 29 × 36 cm, y un medidor que recomienda la talla con 1,5 cm de margen. Las medidas, precios y fotos de referencia viven en el arreglo `SIZES` de `frontend/index.html`. La lista de disponibilidad del inventario (`/api/public/catalog`) aparece debajo de la colección solo cuando hay referencias públicas.
@@ -51,6 +52,8 @@ Los botones de las piezas abren WhatsApp para consultar tamaño, precio y dispon
   - «Dar de baja» saca la pieza del inventario con un movimiento trazable. «Eliminar ficha» solo borra una ficha creada por error; la pieza sigue en existencias.
   - Al vender se marca qué unidad salió. Si todas las piezas tienen ficha, es obligatorio. Al anular la venta, la unidad vuelve a estar disponible.
   - En la portada, cada talla lista las unidades disponibles con foto cerrada, su vista abierta, su precio y un botón de WhatsApp con su código.
+  - **Reservas.** Desde «Unidades», «Reservar…» aparta una pieza para un cliente (nombre, contacto, nota) por 24, 48, 72 horas o una semana. Mientras está reservada no aparece en la tienda; al vencer vuelve sola, sin tarea programada. «Liberar» la devuelve antes. En Ventas la pieza aparece marcada «Reservada · cliente» y al venderla se borra la reserva.
+  - **Enlace de cada pieza.** `https://gatelier.online/#CODIGO` abre la talla y resalta esa pieza; si ya se vendió o está reservada, la página lo avisa. El panel tiene «Copiar enlace» y la tienda «Compartir esta pieza»; el mensaje de WhatsApp incluye el enlace.
   - Las fotos se reducen en el navegador a menos de 900 KB, porque Nginx acepta 1 MB por petición. Se validan como JPG, PNG o WebP reales y se guardan en PostgreSQL (`unit_photos`), dentro del mismo volumen y respaldo, sin cambios en `compose.yaml`. Las fotos subidas antes a nivel de referencia se trasladan solas a una primera unidad.
 - **Zona horaria.** La fecha por defecto de una venta usa `APP_TIMEZONE` (por defecto `America/Bogota`); si la imagen no trae datos de zonas horarias, se usa UTC−5.
 - **Migración.** Al arrancar, la API añade las columnas nuevas de producción sin borrar datos y registra las órdenes ya completadas como «real = previsto», que es lo que ocurrió con la versión anterior. Es idempotente.

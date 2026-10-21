@@ -164,3 +164,64 @@ def test_migra_fotos_de_referencia_a_una_unidad(user, app_ready):
     assert len(d["units"]) == 1 and d["units"][0]["code"] == f"{p['sku']}-001" and "closed" in d["units"][0]["photos"]
     with psycopg.connect(TEST_URL) as c:
         assert c.execute("SELECT COUNT(*) FROM product_photos WHERE product_id=%s", (p["id"],)).fetchone()[0] == 0
+
+
+# ----------------------------- Reservas -----------------------------
+
+def test_reserva_oculta_de_la_tienda_y_se_libera(user, app_ready):
+    p = ref(user, size="L", quantity=2)
+    u1 = add_unit(user, p["id"], "uno").json()["units"][0]["id"]
+    u2 = add_unit(user, p["id"], "dos").json()["units"][0]["id"]
+    up(user, u1, "closed"); up(user, u2, "closed")
+    r = user.post(f"/units/{u1}/reserve", json={"customer": "Laura", "contact": "@laura", "hours": 24})
+    assert r.status_code == 200, r.text
+    unit = next(u for u in r.json()["units"] if u["id"] == u1)
+    assert unit["shown_status"] == "reserved" and unit["reservation"]["customer"] == "Laura"
+    assert r.json()["product"]["units_with_photo"] == 1          # solo la no reservada cuenta como visible
+    shop = {i["id"]: i for i in anon().get("/public/catalog").json()["items"]}
+    assert [s["id"] for s in shop[p["id"]]["styles"]] == [u2]
+    assert user.delete(f"/units/{u1}/reserve").status_code == 200
+    assert user.delete(f"/units/{u1}/reserve").status_code == 409
+    shop = {i["id"]: i for i in anon().get("/public/catalog").json()["items"]}
+    assert {s["id"] for s in shop[p["id"]]["styles"]} == {u1, u2}
+
+
+def test_reserva_vencida_vuelve_sola(user, app_ready, db):
+    p = ref(user, size="L", quantity=1)
+    uid = add_unit(user, p["id"]).json()["units"][0]["id"]
+    up(user, uid, "closed")
+    user.post(f"/units/{uid}/reserve", json={"customer": "Pedro", "hours": 1})
+    db.execute("UPDATE product_units SET reserved_until=NOW()-interval '1 minute' WHERE id=%s", (uid,))
+    db.commit()
+    shop = {i["id"]: i for i in anon().get("/public/catalog").json()["items"]}
+    assert [s["id"] for s in shop[p["id"]]["styles"]] == [uid]
+    unit = user.get(f"/inventory/{p['id']}/units").json()["units"][0]
+    assert unit["shown_status"] == "available" and unit["reservation"] is None
+
+
+def test_validaciones_de_reserva(user, admin):
+    p = ref(user, quantity=2)
+    uid = add_unit(user, p["id"]).json()["units"][0]["id"]
+    assert user.post(f"/units/{uid}/reserve", json={"customer": "L"}).status_code == 422
+    assert user.post(f"/units/{uid}/reserve", json={"customer": "Laura", "hours": 0}).status_code == 422
+    assert user.post(f"/units/{uid}/reserve", json={"customer": "Laura", "hours": 500}).status_code == 422
+    # Volver a reservar actualiza cliente y plazo.
+    user.post(f"/units/{uid}/reserve", json={"customer": "Laura", "hours": 2})
+    r = user.post(f"/units/{uid}/reserve", json={"customer": "Ana", "hours": 72})
+    assert r.json()["units"][0]["reservation"]["customer"] == "Ana"
+    # No se reserva una unidad vendida.
+    s = user.post("/sales", json={"channel": "whatsapp", "payment_method": "cash",
+                                  "items": [{"product_id": p["id"], "quantity": 1, "unit_price": 70000, "unit_ids": [uid]}]})
+    assert s.status_code == 201, s.text
+    unit = user.get(f"/inventory/{p['id']}/units").json()["units"]
+    sold = next(u for u in unit if u["id"] == uid)
+    assert sold["status"] == "sold" and sold["reservation"] is None    # vender limpia la reserva
+    assert user.post(f"/units/{uid}/reserve", json={"customer": "Laura"}).status_code == 409
+
+
+def test_opciones_de_venta_muestran_reserva(user):
+    p = ref(user, quantity=1)
+    uid = add_unit(user, p["id"]).json()["units"][0]["id"]
+    user.post(f"/units/{uid}/reserve", json={"customer": "Camila", "hours": 10})
+    opt = next(x for x in user.get("/sales/options").json()["products"] if x["id"] == p["id"])
+    assert opt["units"][0]["reserved_for"] == "Camila" and opt["units"][0]["reserved_until"]

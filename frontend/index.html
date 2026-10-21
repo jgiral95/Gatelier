@@ -5,6 +5,17 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#344a42">
   <meta name="description" content="Productos textiles hechos a mano en Gatelier con telas recuperadas. Cinco tallas, del libro de bolsillo al de gran formato. Consulta y compra por WhatsApp.">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Gatelier">
+  <meta property="og:title" content="Gatelier · Atelier textil consciente">
+  <meta property="og:description" content="Productos textiles hechos a mano con telas recuperadas. Cada pieza es única: mírala por fuera y por dentro y pídela por WhatsApp.">
+  <meta property="og:image" content="https://gatelier.online/assets/og-gatelier.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Logo de Gatelier junto a dos productos textiles hechos a mano">
+  <meta property="og:url" content="https://gatelier.online/">
+  <meta property="og:locale" content="es_CO">
+  <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png"><link rel="icon" type="image/png" sizes="192x192" href="/assets/icon-192.png"><link rel="apple-touch-icon" href="/assets/apple-touch-icon.png"><title>Gatelier — Atelier textil consciente</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -130,6 +141,13 @@
     .style-body h4{margin:0;font:500 19px/1.2 var(--serif)}
     .style-ref{font-size:12px;color:var(--muted);letter-spacing:.04em}
     .style-body .btn{margin-top:auto;min-height:44px;font-size:14px}
+    .style.highlight{box-shadow:0 0 0 3px var(--leather);border-color:var(--leather)}
+    .style-actions{margin-top:auto;display:flex;flex-direction:column;gap:8px}
+    .style-actions .btn{margin-top:0}
+    .share{all:unset;cursor:pointer;text-align:center;font-size:13px;font-weight:600;color:var(--forest);padding:8px;border-radius:999px;min-height:28px}
+    .share:hover{text-decoration:underline;text-underline-offset:4px}
+    .share:focus-visible{outline:2px solid var(--leather);outline-offset:2px}
+    .piece-notice{margin:24px 0 0;padding:14px 18px;border-radius:8px;background:var(--mint-soft);color:var(--forest);font-size:15px}
     .styles-empty{margin:0;color:var(--text);font-size:15px}
     @media (max-width:560px){.styles{padding:18px 14px}.styles-head h3{font-size:26px}}
 
@@ -276,6 +294,7 @@
           <p>Cada producto es único. Toca una talla para ver los estilos disponibles hoy, por fuera y por dentro.</p>
         </div>
         <div class="cards" id="cards"></div>
+        <p class="piece-notice" id="pieceNotice" role="status" hidden></p>
         <div class="styles" id="styles" hidden tabindex="-1" aria-live="polite"></div>
       </div>
     </section>
@@ -412,9 +431,9 @@
       }).join('');
     }
     function styleCard(it,s){
-      const msg=`Hola, me interesa el producto ${it.name} (ref. ${it.ref}, talla ${s.code}, ${money(it.sale_price)}) que vi en la página de Gatelier. ¿Sigue disponible?`;
+      const msg=`Hola, me interesa el producto ${it.name} (ref. ${it.ref}, talla ${s.code}, ${money(it.sale_price)}) que vi en la página de Gatelier: ${pieceUrl(it.ref)} ¿Sigue disponible?`;
       const link=waLink(msg);const both=it.photos.open;
-      return `<article class="style"><div class="style-photo"><img class="outer" src="${esc(it.photos.closed)}" alt="${esc(it.name)}, cerrado: tela exterior" loading="lazy">${both?`<img class="inner" src="${esc(it.photos.open)}" alt="${esc(it.name)}, abierto: tela interior" loading="lazy"><div class="view-switch" role="group" aria-label="Ver el producto"><button type="button" data-view="closed" aria-pressed="true">Cerrado</button><button type="button" data-view="open" aria-pressed="false">Abierto</button></div>`:''}</div><div class="style-body"><h4>${esc(it.name)}</h4><span class="style-ref">Ref. ${esc(it.ref)}</span><span class="card-price">${money(it.sale_price)}</span>${link?`<a class="btn" href="${link}" target="_blank" rel="noopener noreferrer">Lo quiero · WhatsApp</a>`:'<span class="btn disabled" aria-disabled="true">WhatsApp pronto</span>'}</div></article>`;
+      return `<article class="style" data-ref="${esc(it.ref)}"><div class="style-photo"><img class="outer" src="${esc(it.photos.closed)}" alt="${esc(it.name)}, cerrado: tela exterior" loading="lazy">${both?`<img class="inner" src="${esc(it.photos.open)}" alt="${esc(it.name)}, abierto: tela interior" loading="lazy"><div class="view-switch" role="group" aria-label="Ver el producto"><button type="button" data-view="closed" aria-pressed="true">Cerrado</button><button type="button" data-view="open" aria-pressed="false">Abierto</button></div>`:''}</div><div class="style-body"><h4>${esc(it.name)}</h4><span class="style-ref">Ref. ${esc(it.ref)}</span><span class="card-price">${money(it.sale_price)}</span><div class="style-actions">${link?`<a class="btn" href="${link}" target="_blank" rel="noopener noreferrer">Lo quiero · WhatsApp</a>`:'<span class="btn disabled" aria-disabled="true">WhatsApp pronto</span>'}<button class="share" type="button" data-share="${esc(it.ref)}" data-name="${esc(it.name)}">Compartir esta pieza</button></div></div></article>`;
     }
     function renderStyles(){
       const box=document.getElementById('styles');
@@ -436,9 +455,31 @@
       if(v){const card=v.closest('.style');card.classList.toggle('show-open',v.dataset.view==='open');card.querySelectorAll('[data-view]').forEach(x=>x.setAttribute('aria-pressed',String(x===v)));return}
       if(e.target.closest('[data-close-styles]')){const code=openSize;openSize=null;renderCards();renderStyles();const t=document.querySelector(`.card-toggle[data-size="${code}"]`);if(t)t.focus()}
     });
+    const SECTION_IDS=['inicio','tallas','coleccion','tela','atelier','supervisores','comprar'];
+    function pieceUrl(ref){return `${location.origin}/#${encodeURIComponent(ref)}`}
+    function openFromHash(){
+      const raw=decodeURIComponent(location.hash.slice(1)||'');const notice=document.getElementById('pieceNotice');
+      notice.hidden=true;
+      if(!raw||SECTION_IDS.includes(raw)||document.getElementById(raw))return;
+      const owner=catalog.find(it=>it.available&&it.size&&(it.styles||[]).some(st=>st.ref===raw&&st.photos&&st.photos.closed));
+      if(!owner){notice.textContent=`La pieza ${raw} ya no está disponible: puede que se haya vendido o esté apartada. Mira los otros estilos de cada talla.`;notice.hidden=false;document.getElementById('coleccion').scrollIntoView({block:'start'});return}
+      openSize=owner.size;renderCards();renderStyles();
+      const card=document.querySelector(`#styles .style[data-ref="${CSS.escape(raw)}"]`);
+      if(card){card.classList.add('highlight');card.scrollIntoView({block:'center',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});card.querySelector('.btn')?.focus({preventScroll:true})}
+    }
+    window.addEventListener('hashchange',openFromHash);
+    document.getElementById('styles').addEventListener('click',async e=>{
+      const b=e.target.closest('[data-share]');if(!b)return;
+      const url=pieceUrl(b.dataset.share);const label=b.textContent;
+      try{
+        if(navigator.share){await navigator.share({title:`Gatelier · ${b.dataset.name}`,text:'Mira esta pieza única de Gatelier',url});return}
+        await navigator.clipboard.writeText(url);b.textContent='Enlace copiado';
+      }catch(err){if(err&&err.name==='AbortError')return;b.textContent=url}
+      setTimeout(()=>{b.textContent=label},2500);
+    });
     async function loadCatalog(){
       try{const r=await fetch('/api/public/catalog',{headers:{Accept:'application/json'}});if(r.ok)catalog=(await r.json()).items||[]}catch(_){/* La galería funciona sin inventario. */}
-      catalogLoaded=true;renderCards();renderStyles();
+      catalogLoaded=true;renderCards();renderStyles();openFromHash();
     }
     renderCards();
 
