@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="theme-color" content="#344a42">
+  <meta name="theme-color" content="#355D53">
   <meta name="description" content="Productos textiles hechos a mano en Gatelier con telas recuperadas. Cinco tallas, del libro de bolsillo al de gran formato. Consulta y compra por WhatsApp.">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Gatelier">
@@ -23,9 +23,10 @@
   <style>
     /* Banda verde de marca arriba y abajo, papel claro en medio; la guía de tallas a escala es el momento central. */
     :root{
-      --forest:#344a42;--forest-dark:#263a33;--mint:#BBE0D7;--mint-soft:#e3f1ec;--sage:#4f7a6c;
-      --leather:#9a5a33;--ink:#26302c;--text:#4f5a55;--muted:#5f6b65;--line:#dcdfd6;
-      --paper:#f6f5ef;--paper-2:#fbfaf6;--white:#ffffff;
+      /* Paleta 2.0: verde Gatelier, crema algodón, amarillo mantequilla, verde bosque, salvia suave y café cacao */
+      --forest:#355D53;--forest-dark:#284940;--mint:#BBDCD3;--mint-soft:#DCE8D8;--sage:#3f6f62;
+      --leather:#765E55;--ink:#24352f;--text:#4a5550;--muted:#5d6762;--line:#e6dcc3;
+      --paper:#FFF5DF;--paper-2:#FFFAEE;--white:#ffffff;--butter:#F5D97E;--salvia:#DCE8D8;
       --serif:Newsreader,Georgia,"Times New Roman",serif;--sans:"Work Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
     }
     *{box-sizing:border-box}
@@ -45,7 +46,7 @@
     .btn{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:0 24px;border-radius:999px;background:var(--forest);color:var(--white);text-decoration:none;font-weight:600;font-size:15px;border:1px solid var(--forest);transition:background .18s}
     .btn:hover{background:var(--forest-dark);color:var(--white)}
     .btn.ghost{background:transparent;color:var(--forest)}
-    .btn.ghost:hover{background:#344a4214;color:var(--forest)}
+    .btn.ghost:hover{background:#355D5314;color:var(--forest)}
     .btn.disabled{background:#aab3ae;border-color:#aab3ae;pointer-events:none}
 
     /* Encabezado */
@@ -59,10 +60,12 @@
     .nav .ig{color:var(--mint);font-weight:600}
 
     /* Hero */
-    .hero{display:flex;flex-wrap:wrap;align-items:center;gap:48px 64px;padding-block:72px 64px}
+    .hero{display:flex;flex-wrap:wrap;align-items:center;gap:48px 64px;padding-block:72px 64px;background:var(--mint);box-shadow:0 0 0 100vmax var(--mint);clip-path:inset(0 -100vmax)}
+    /* En fondos verde y amarillo, texto secundario más oscuro para que se lea bien */
+    .hero,.collection,.buy{--muted:#45504b;--text:#45504b;--leather:#5f4a42}
     .hero-copy{flex:1 1 420px;min-width:0;display:flex;flex-direction:column;gap:22px}
     .hero h1{margin:0;font:400 76px/.98 var(--serif);letter-spacing:-.035em}
-    .hero h1 em{color:var(--sage)}
+    .hero h1 em{color:var(--forest)}
     .hero-lead{margin:0;max-width:470px;font-size:18px;color:var(--text)}
     .hero-actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:6px}
     .hero-note{margin:0;font-size:14px;color:var(--muted)}
@@ -71,7 +74,7 @@
     .hero-figure figcaption{position:absolute;left:20px;bottom:20px;background:var(--paper);padding:8px 14px;border-radius:4px;font:italic 16px var(--serif);color:var(--forest)}
 
     /* Tres razones */
-    .reasons{border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--paper-2)}
+    .reasons{border-top:1px solid #c9d9c4;border-bottom:1px solid #c9d9c4;background:var(--salvia)}
     .reasons .wrap{display:flex;flex-wrap:wrap;gap:28px 56px;padding-block:36px}
     .reasons .wrap>div{flex:1 1 260px;min-width:0}
     .reasons h2{margin:0 0 6px;font:500 22px var(--serif)}
@@ -80,10 +83,10 @@
     /* Guía de tallas */
     .guide{display:flex;flex-wrap:wrap;gap:40px 56px;align-items:flex-start}
     .scale-card{flex:0 1 420px;min-width:0;background:var(--paper-2);border:1px solid var(--line);border-radius:6px;padding:28px 24px 20px}
-    .scale{position:relative;width:319px;max-width:100%;height:396px;margin:0 auto;background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:55px 55px;background-position:left bottom;border-left:1px solid #8a948f;border-bottom:1px solid #8a948f}
+    .scale{position:relative;width:319px;max-width:100%;aspect-ratio:319/396;margin:0 auto;background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:calc(100% * 55 / 319) calc(100% * 55 / 396);background-position:left bottom;border-left:1px solid #8a948f;border-bottom:1px solid #8a948f}
     .scale-box{position:absolute;left:0;bottom:0;border:1px solid #6f7d77;border-left:0;border-bottom:0;background:transparent;transition:background .2s,border-color .2s}
     .scale-box span{position:absolute;right:6px;top:4px;font-size:12px;font-weight:600;color:var(--muted)}
-    .scale-box.on{border:2px solid var(--forest);border-left:0;border-bottom:0;background:#BBE0D7cc;z-index:6}
+    .scale-box.on{border:2px solid var(--forest);border-left:0;border-bottom:0;background:#F5D97Ecc;z-index:6}
     .scale-box.on span{color:var(--ink)}
     .scale-axis{display:flex;justify-content:space-between;width:319px;max-width:100%;margin:6px auto 0;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
     .detail{flex:1 1 420px;min-width:0;display:flex;flex-direction:column;gap:24px}
@@ -107,10 +110,10 @@
     .small{margin:0;font-size:13px;color:var(--muted)}
 
     /* Colección */
-    .collection{background:var(--white);border-top:1px solid var(--line)}
+    .collection{background:var(--mint)}
     .cards{display:flex;flex-wrap:wrap;gap:20px}
-    .card{flex:1 1 200px;min-width:0;display:flex;flex-direction:column;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--paper-2)}
-    .card-photo{height:260px;background:#f1efe6;padding:14px;display:flex;align-items:center;justify-content:center}
+    .card{flex:1 1 200px;min-width:0;display:flex;flex-direction:column;border:1px solid #a9cbc1;border-radius:6px;overflow:hidden;background:var(--paper-2)}
+    .card-photo{height:260px;background:var(--paper);padding:14px;display:flex;align-items:center;justify-content:center}
     .card-photo img{display:block;width:100%;height:100%;object-fit:contain}
     .card-body{padding:16px;display:flex;flex-direction:column;gap:6px;flex:1}
     .card h3{margin:0;font:500 21px/1.15 var(--serif)}
@@ -123,13 +126,13 @@
     .card.open{border-color:var(--forest);box-shadow:0 0 0 1px var(--forest)}
     .card-toggle{all:unset;cursor:pointer;display:flex;flex-direction:column;flex:1}
     .card-toggle:focus-visible{outline:2px solid var(--leather);outline-offset:-2px}
-    .styles{margin-top:28px;border:1px solid var(--line);border-radius:8px;background:var(--paper-2);padding:24px}
+    .styles{margin-top:28px;border:1px solid #a9cbc1;border-radius:8px;background:var(--paper-2);padding:24px}
     .styles-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-start;gap:12px 24px;margin-bottom:20px}
     .styles-head h3{margin:0;font:400 30px/1.1 var(--serif);letter-spacing:-.01em}
     .styles-head p{margin:6px 0 0;color:var(--text);font-size:15px}
     .styles-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,230px),1fr));gap:20px}
     .style{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--white);min-width:0}
-    .style-photo{position:relative;aspect-ratio:4/5;max-width:100%;background:#f1efe6}
+    .style-photo{position:relative;aspect-ratio:4/5;max-width:100%;background:var(--paper)}
     .style-photo img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transition:opacity .25s}
     .style-photo img.inner{opacity:0}
     .style.show-open .style-photo img.inner{opacity:1}
@@ -141,7 +144,7 @@
     .style-body h4{margin:0;font:500 19px/1.2 var(--serif)}
     .style-ref{font-size:12px;color:var(--muted);letter-spacing:.04em}
     .style-body .btn{margin-top:auto;min-height:44px;font-size:14px}
-    .style.highlight{box-shadow:0 0 0 3px var(--leather);border-color:var(--leather)}
+    .style.highlight{box-shadow:0 0 0 3px var(--butter);border-color:#d9b84d}
     .style-actions{margin-top:auto;display:flex;flex-direction:column;gap:8px}
     .style-actions .btn{margin-top:0}
     .share{all:unset;cursor:pointer;text-align:center;font-size:13px;font-weight:600;color:var(--forest);padding:8px;border-radius:999px;min-height:28px}
@@ -168,7 +171,7 @@
     .atelier-copy{flex:1 1 420px;min-width:0;display:flex;flex-direction:column;gap:20px}
     .atelier-copy .h2{margin:0}
     .atelier-copy p{margin:0;max-width:520px;font-size:17px;color:var(--text)}
-    .atelier blockquote{margin:8px 0 0;padding-left:20px;border-left:2px solid var(--leather);font:italic 24px/1.35 var(--serif);color:var(--forest)}
+    .atelier blockquote{margin:8px 0 0;padding-left:20px;border-left:2px solid var(--butter);font:italic 24px/1.35 var(--serif);color:var(--forest)}
     .atelier>img{flex:0 1 380px;min-width:0;width:380px;height:500px;object-fit:cover;border-radius:190px 190px 6px 6px}
     .cats{padding-bottom:80px;display:flex;flex-direction:column;gap:28px}
     .cats .section-head{margin:0}
@@ -189,7 +192,7 @@
     @media (max-width:600px){.cat.feature{grid-column:auto}}
 
     /* Cómo comprar */
-    .buy{background:var(--mint-soft);border-top:1px solid #c9ddd5}
+    .buy{background:var(--butter)}
     .buy .wrap{display:flex;flex-direction:column;gap:32px;padding-block:72px}
     .buy h2{margin:0;font:400 44px/1.05 var(--serif);letter-spacing:-.02em}
     .buy ol{margin:0;padding:0;list-style:none;display:flex;flex-wrap:wrap;gap:24px 40px}
@@ -205,7 +208,7 @@
     .footer-brand{display:flex;align-items:center;gap:16px}
     .footer-brand img{display:block;width:96px;height:auto}
     .footer-links{display:flex;flex-wrap:wrap;gap:8px 22px}
-    .footer a{color:#dfe8e3}.footer a.team{color:#aebcb5}
+    .footer a{color:#dfe8e3}.footer a.team-link{color:#c3d3cc}
 
     @media (max-width:800px){.hero h1{font-size:60px}.h2{font-size:40px}}
     @media (max-width:560px){
@@ -369,7 +372,7 @@
       <div class="footer-links">
         <a href="https://www.instagram.com/gatelier_/" target="_blank" rel="noopener noreferrer">Instagram</a>
         <a id="wa-footer" href="#" target="_blank" rel="noopener noreferrer">WhatsApp</a>
-        <a class="team" href="/admin/">Acceso del equipo</a>
+        <a class="team-link" href="/admin/">Acceso del equipo</a>
       </div>
     </div>
   </footer>
@@ -390,12 +393,12 @@
       {code:'L',w:24,h:32,price:85000,color:'Terracota y crudo',image:'l.webp',alt:'Producto talla L crudo con solapa terracota y botón',fits:['Libro ilustrado','Cuaderno tamaño carta','Tablet de 12 a 13 pulgadas']},
       {code:'XL',w:29,h:36,price:90000,color:'Rosa y arena',image:'xl.webp',alt:'Producto talla XL rosa con solapa color arena',fits:['Libro de arte o de gran formato','Carpeta de dibujo pequeña','Portátil de 13 pulgadas']}
     ];
-    const PX=11, MARGIN=1.5;
+    const MARGIN=1.5;
     const sizeMsg=s=>`Hola, vi en la página de Gatelier el producto talla ${s.code} (${s.w} × ${s.h} cm, ${money(s.price)}). ¿Me confirman qué combinaciones tienen disponibles?`;
 
     // Guía de tallas
     const scale=document.getElementById('scale'), pills=document.getElementById('pills');
-    scale.innerHTML=SIZES.map((s,i)=>`<div class="scale-box" data-code="${s.code}" style="width:${s.w*PX}px;height:${s.h*PX}px;z-index:${5-i}"><span>${s.code}</span></div>`).join('');
+    scale.innerHTML=SIZES.map((s,i)=>`<div class="scale-box" data-code="${s.code}" style="width:${(s.w/29*100).toFixed(3)}%;height:${(s.h/36*100).toFixed(3)}%;z-index:${5-i}"><span>${s.code}</span></div>`).join('');
     pills.innerHTML=SIZES.map(s=>`<button class="pill" type="button" data-code="${s.code}" aria-pressed="false">${s.code}</button>`).join('');
     function selectSize(code){
       const s=SIZES.find(x=>x.code===code);if(!s)return;
