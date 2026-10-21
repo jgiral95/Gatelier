@@ -166,6 +166,12 @@ async def lifespan(app):
             client_ref VARCHAR(64) UNIQUE,
             created_by BIGINT REFERENCES app_users(id), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())""")
         c.execute("CREATE INDEX IF NOT EXISTS operating_expenses_date_idx ON operating_expenses(expense_date)")
+        # Comprobantes: una imagen (o PDF) por venta o gasto, guardada en la base como las fotos de las unidades.
+        c.execute("""CREATE TABLE IF NOT EXISTS receipts(
+            id BIGSERIAL PRIMARY KEY, owner_type VARCHAR(10) NOT NULL CHECK(owner_type IN ('sale','expense')),
+            owner_id BIGINT NOT NULL, content_type VARCHAR(40) NOT NULL, data BYTEA NOT NULL,
+            uploaded_by BIGINT REFERENCES app_users(id), uploaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            UNIQUE(owner_type,owner_id))""")
         # Unidades: cada pieza única de una referencia terminada, con sus propias fotos.
         c.execute("""CREATE TABLE IF NOT EXISTS product_units(
             id BIGSERIAL PRIMARY KEY, product_id BIGINT NOT NULL REFERENCES inventory_products(id),
@@ -325,6 +331,74 @@ def _image_type(data: bytes) -> Optional[str]:
     if data[:8]==b"\x89PNG\r\n\x1a\n": return "image/png"
     if data[:4]==b"RIFF" and data[8:12]==b"WEBP": return "image/webp"
     return None
+
+# Comprobantes de ventas y gastos: privados, solo para cuentas con sesión.
+MAX_RECEIPT_BYTES=1_500_000
+def _receipt_type(data: bytes) -> Optional[str]:
+    return _image_type(data) or ("application/pdf" if data[:5]==b"%PDF-" else None)
+
+def _receipt_info(prefix: str, oid: int, packed: Optional[str]):
+    if not packed: return None
+    ver,ctype,who=packed.split('|',2)
+    return {"url":f"/api/{prefix}/{oid}/receipt?v={ver}","content_type":ctype,"is_pdf":ctype=="application/pdf",
+            "uploaded_by":who or None,"uploaded_at":datetime.fromtimestamp(int(ver)/1000,timezone.utc).isoformat()}
+
+RECEIPT_OWNERS={"sale":("sales","Venta no encontrada"),"expense":("operating_expenses","Gasto no encontrado")}
+
+def _receipt_owner(c, kind: str, oid: int, lock: bool=False):
+    table,missing=RECEIPT_OWNERS[kind]
+    r=c.execute(f"SELECT status FROM {table} WHERE id=%s"+(" FOR UPDATE" if lock else ""),(oid,)).fetchone()
+    if not r: raise HTTPException(404,missing)
+    return r[0]
+
+async def _save_receipt(kind: str, oid: int, request: Request, file: UploadFile):
+    u=user_from(request)
+    data=await file.read(MAX_RECEIPT_BYTES+1)
+    if len(data)>MAX_RECEIPT_BYTES: raise HTTPException(413,"El comprobante pesa demasiado. Usa uno de menos de 1,5 MB.")
+    ctype=_receipt_type(data)
+    if not ctype: raise HTTPException(422,"El comprobante debe ser una imagen JPG, PNG o WebP, o un PDF")
+    with psycopg.connect(DB) as c:
+        if _receipt_owner(c,kind,oid,lock=True) in ("voided",): raise HTTPException(409,"No se puede cambiar el comprobante de un registro anulado")
+        c.execute("""INSERT INTO receipts(owner_type,owner_id,content_type,data,uploaded_by,uploaded_at) VALUES(%s,%s,%s,%s,%s,NOW())
+            ON CONFLICT(owner_type,owner_id) DO UPDATE SET content_type=EXCLUDED.content_type,data=EXCLUDED.data,
+            uploaded_by=EXCLUDED.uploaded_by,uploaded_at=NOW()""",(kind,oid,ctype,data,u['id']))
+    return {"message":"Comprobante guardado"}
+
+def _get_receipt(kind: str, oid: int, request: Request):
+    user_from(request)
+    with psycopg.connect(DB) as c:
+        r=c.execute("SELECT content_type,data FROM receipts WHERE owner_type=%s AND owner_id=%s",(kind,oid)).fetchone()
+    if not r: raise HTTPException(404,"Este registro no tiene comprobante")
+    ext="pdf" if r[0]=="application/pdf" else r[0].split('/')[1].replace('jpeg','jpg')
+    return Response(content=bytes(r[1]),media_type=r[0],headers={"Cache-Control":"private, max-age=86400",
+        "Content-Disposition":f'inline; filename="comprobante-{kind}-{oid}.{ext}"',"X-Content-Type-Options":"nosniff"})
+
+def _delete_receipt(kind: str, oid: int, request: Request):
+    require_admin(request)
+    with psycopg.connect(DB) as c:
+        _receipt_owner(c,kind,oid)
+        if not c.execute("DELETE FROM receipts WHERE owner_type=%s AND owner_id=%s",(kind,oid)).rowcount:
+            raise HTTPException(404,"Este registro no tiene comprobante")
+    return {"message":"Comprobante eliminado"}
+
+@app.post("/sales/{sale_id}/receipt")
+async def upload_sale_receipt(sale_id: int, request: Request, file: UploadFile = File(...)):
+    return await _save_receipt("sale",sale_id,request,file)
+@app.get("/sales/{sale_id}/receipt")
+def sale_receipt(sale_id: int, request: Request):
+    return _get_receipt("sale",sale_id,request)
+@app.delete("/sales/{sale_id}/receipt")
+def delete_sale_receipt(sale_id: int, request: Request):
+    return _delete_receipt("sale",sale_id,request)
+@app.post("/expenses/{exp_id}/receipt")
+async def upload_expense_receipt(exp_id: int, request: Request, file: UploadFile = File(...)):
+    return await _save_receipt("expense",exp_id,request,file)
+@app.get("/expenses/{exp_id}/receipt")
+def expense_receipt(exp_id: int, request: Request):
+    return _get_receipt("expense",exp_id,request)
+@app.delete("/expenses/{exp_id}/receipt")
+def delete_expense_receipt(exp_id: int, request: Request):
+    return _delete_receipt("expense",exp_id,request)
 
 @app.get("/public/unit-photos/{uid}/{kind}")
 def public_unit_photo(uid: int, kind: Literal["closed","open"]):
@@ -1085,7 +1159,9 @@ class SaleVoid(BaseModel):
     reason: str = Field(min_length=3, max_length=500)
 
 SALE_COLUMNS="""s.id,s.sale_date,s.channel,s.payment_method,s.customer_name,s.customer_contact,s.subtotal,s.discount,
-    s.shipping,s.total,s.cost_total,s.status,s.note,cu.username,s.created_at,vu.username,s.voided_at,s.void_reason"""
+    s.shipping,s.total,s.cost_total,s.status,s.note,cu.username,s.created_at,vu.username,s.voided_at,s.void_reason,
+    (SELECT floor(extract(epoch FROM rc.uploaded_at)*1000)::bigint||'|'||rc.content_type||'|'||COALESCE(ru.username,'')
+     FROM receipts rc LEFT JOIN app_users ru ON ru.id=rc.uploaded_by WHERE rc.owner_type='sale' AND rc.owner_id=s.id)"""
 SALE_FROM="""FROM sales s LEFT JOIN app_users cu ON cu.id=s.created_by LEFT JOIN app_users vu ON vu.id=s.voided_by"""
 
 def _sale_dict(r, items=None):
@@ -1094,7 +1170,7 @@ def _sale_dict(r, items=None):
        "payment_method":r[3],"payment_label":PAYMENT_METHODS.get(r[3],r[3]),"customer_name":r[4],"customer_contact":r[5],
        "subtotal":r[6],"discount":r[7],"shipping":r[8],"total":r[9],"net_revenue":net,"cost_total":r[10],
        "margin":net-r[10],"status":r[11],"note":r[12],"created_by":r[13],"created_at":r[14],
-       "voided_by":r[15],"voided_at":r[16],"void_reason":r[17]}
+       "voided_by":r[15],"voided_at":r[16],"void_reason":r[17],"receipt":_receipt_info("sales",r[0],r[18])}
     if items is not None: d["items"]=items
     return d
 
@@ -1531,13 +1607,15 @@ class ExpenseVoid(BaseModel):
     reason: str = Field(min_length=3, max_length=500)
 
 EXP_COLUMNS="""e.id,e.expense_date,e.category,e.description,e.amount,e.payment_method,e.note,e.status,e.void_reason,
-    cu.username,e.created_at,vu.username,e.voided_at"""
+    cu.username,e.created_at,vu.username,e.voided_at,
+    (SELECT floor(extract(epoch FROM rc.uploaded_at)*1000)::bigint||'|'||rc.content_type||'|'||COALESCE(ru.username,'')
+     FROM receipts rc LEFT JOIN app_users ru ON ru.id=rc.uploaded_by WHERE rc.owner_type='expense' AND rc.owner_id=e.id)"""
 EXP_FROM="""FROM operating_expenses e LEFT JOIN app_users cu ON cu.id=e.created_by LEFT JOIN app_users vu ON vu.id=e.voided_by"""
 
 def _expense_dict(r):
     return {"id":r[0],"expense_date":r[1].isoformat(),"category":r[2],"category_label":EXPENSE_CATEGORIES.get(r[2],r[2]),
         "description":r[3],"amount":r[4],"payment_method":r[5],"note":r[6],"status":r[7],"void_reason":r[8],
-        "created_by":r[9],"created_at":r[10],"voided_by":r[11],"voided_at":r[12]}
+        "created_by":r[9],"created_at":r[10],"voided_by":r[11],"voided_at":r[12],"receipt":_receipt_info("expenses",r[0],r[13])}
 
 def _expenses_by_category(c, start: date, end: date):
     rows=c.execute("""SELECT category,COUNT(*),SUM(amount) FROM operating_expenses

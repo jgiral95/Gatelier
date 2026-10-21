@@ -238,3 +238,18 @@ td .actions{flex-wrap:nowrap}
 }
 
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+/* Comprobantes de ventas y gastos */
+.rcpt{display:inline-flex;align-items:center;gap:8px;margin-top:6px;color:var(--forest);font-size:12px;font-weight:600;text-decoration:none}
+.rcpt:hover span{text-decoration:underline}
+.rcpt img,.rcpt .rcpt-pdf{width:34px;height:34px;border-radius:6px;object-fit:cover;border:1px solid var(--line);background:#fff;flex:none}
+.rcpt-pdf{display:inline-grid;place-items:center;font-size:10px;font-weight:700;letter-spacing:.04em;color:var(--danger);background:var(--danger-soft)!important}
+.rcpt-add{margin-top:6px}
+.rcpt-big{display:block;max-width:100%;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fff}
+.rcpt-big img{display:block;max-width:100%;max-height:420px;margin:0 auto;object-fit:contain}
+.rcpt-big.pdf{display:flex;align-items:center;gap:12px;padding:14px;color:var(--forest);font-weight:600;text-decoration:none}
+.rcpt-big.pdf .rcpt-pdf{width:44px;height:44px;border-radius:8px}
+.rcpt-box{margin-top:16px;display:grid;gap:8px}
+.rcpt-box h3{margin:0;font-size:13px}
+.rcpt-actions{display:flex;gap:8px;flex-wrap:wrap}
+.filepick input[type=file]{padding:9px;background:#fff}
