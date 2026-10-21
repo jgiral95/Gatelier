@@ -27,8 +27,8 @@
 <div class="field span2"><label for="iName">Qué se compró *</label><input id="iName" maxlength="160" placeholder="Ej. Máquina de coser recta industrial" required></div>
 <div class="field"><label for="iCategory">Tipo</label><select id="iCategory"><option value="equipment">Máquinas y equipos</option><option value="tools">Herramientas</option><option value="workshop">Adecuación del taller</option><option value="other">Otro</option></select></div>
 <div class="field"><label for="iDate">Fecha de compra *</label><input id="iDate" type="date" required></div>
-<div class="field"><label for="iAmount">Valor pagado (COP) *</label><input id="iAmount" type="number" min="1" step="1000" required></div>
-<div class="field"><label for="iSalvage">Valor de reventa al final (COP)</label><input id="iSalvage" type="number" min="0" step="1000" value="0"><span class="hint">Lo que esperas recuperar al venderlo. Si no sabes, déjalo en 0.</span></div>
+<div class="field"><label for="iAmount">Valor pagado (COP) *</label><input id="iAmount" data-money type="number" min="1" step="1000" required></div>
+<div class="field"><label for="iSalvage">Valor de reventa al final (COP)</label><input id="iSalvage" data-money type="number" min="0" step="1000" value="0"><span class="hint">Lo que esperas recuperar al venderlo. Si no sabes, déjalo en 0.</span></div>
 <div class="field"><label for="iLife">Vida útil *</label><div style="display:flex;gap:8px"><input id="iLife" type="number" min="1" step="1" required style="flex:1"><select id="iLifeUnit" style="width:auto"><option value="12">años</option><option value="1">meses</option></select></div><span class="hint">Cuánto tiempo esperas usarlo en el taller.</span></div>
 <div class="field"><label for="iNote">Nota</label><input id="iNote" maxlength="1000" placeholder="Proveedor, factura, garantía…"></div>
 </div>
@@ -44,6 +44,7 @@
 <div id="retError" class="error"></div>
 <div class="modalactions"><button class="quiet" type="button" data-close="retBg">Cancelar</button><button id="retSave" class="primary" type="submit">Dar de baja</button></div></form></section></div>
 <div id="toast" class="toast hidden" role="status"></div>
+<script src="/admin/money-input.js?v=1"></script>
 <script>
 const $=id=>document.getElementById(id);let me=null,items=[],editing=null,retiring=null;
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));

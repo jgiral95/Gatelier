@@ -28,7 +28,7 @@
 <div class="field span2"><label for="eDesc">Concepto *</label><input id="eDesc" maxlength="160" placeholder="Ej. Pauta de Instagram, domicilio a Laureles, bolsas kraft" required></div>
 <div class="field"><label for="eCategory">Categoría *</label><select id="eCategory"></select></div>
 <div class="field"><label for="eDate">Fecha *</label><input id="eDate" type="date" required></div>
-<div class="field"><label for="eAmount">Valor (COP) *</label><input id="eAmount" type="number" min="1" step="100" inputmode="numeric" required></div>
+<div class="field"><label for="eAmount">Valor (COP) *</label><input id="eAmount" data-money type="number" min="1" step="100" inputmode="numeric" required></div>
 <div class="field"><label for="ePay">Pagado con</label><select id="ePay"><option value="cash">Efectivo</option><option value="transfer">Transferencia</option></select></div>
 <div id="invBlock" class="span2 invblock hidden"><div class="grid"><div class="field"><label for="eItem">Artículo del inventario *</label><select id="eItem"></select><span class="hint">¿No está? Créalo primero en Inventario.</span></div><div class="field"><label for="eQty">Cantidad comprada *</label><input id="eQty" type="number" min="1" step="1" inputmode="decimal"></div></div><div id="invPreview" class="summarybox"></div></div>
 <div class="field span2"><label for="eNote">Nota</label><input id="eNote" maxlength="1000" placeholder="Proveedor, factura, a qué venta corresponde…"></div>
@@ -46,6 +46,7 @@
 <input id="rcptPick" type="file" accept="image/*,application/pdf" class="hidden" aria-hidden="true" tabindex="-1">
 <div id="toast" class="toast hidden" role="status"></div>
 <script src="/admin/receipts.js?v=1"></script>
+<script src="/admin/money-input.js?v=1"></script>
 <script>
 const $=id=>document.getElementById(id);let me=null,items=[],cats={},voiding=null,clientRef=null,stockItems=null;const DISCRETE=['unidad','rollo','paquete'];const qty=v=>new Intl.NumberFormat('es-CO',{maximumFractionDigits:3}).format(Number(v||0));
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
