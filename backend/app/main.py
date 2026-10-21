@@ -155,6 +155,17 @@ async def lifespan(app):
             created_by BIGINT REFERENCES app_users(id), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             updated_by BIGINT REFERENCES app_users(id), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             CHECK(salvage_value<amount), CHECK(retired_date IS NULL OR retired_date>=purchase_date))""")
+        # Gastos del negocio que no son de fabricar (publicidad, transporte, comisiones…). Se anulan, nunca se borran.
+        c.execute("""CREATE TABLE IF NOT EXISTS operating_expenses(
+            id BIGSERIAL PRIMARY KEY, expense_date DATE NOT NULL,
+            category VARCHAR(20) NOT NULL CHECK(category IN ('packaging','shipping','marketing','fees','supplies','services','other')),
+            description VARCHAR(160) NOT NULL, amount NUMERIC(14,2) NOT NULL CHECK(amount>0),
+            payment_method VARCHAR(20) NOT NULL DEFAULT 'cash' CHECK(payment_method IN ('cash','transfer')),
+            note TEXT NOT NULL DEFAULT '', status VARCHAR(10) NOT NULL DEFAULT 'active' CHECK(status IN ('active','voided')),
+            void_reason TEXT NOT NULL DEFAULT '', voided_by BIGINT REFERENCES app_users(id), voided_at TIMESTAMPTZ,
+            client_ref VARCHAR(64) UNIQUE,
+            created_by BIGINT REFERENCES app_users(id), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())""")
+        c.execute("CREATE INDEX IF NOT EXISTS operating_expenses_date_idx ON operating_expenses(expense_date)")
         # Unidades: cada pieza única de una referencia terminada, con sus propias fotos.
         c.execute("""CREATE TABLE IF NOT EXISTS product_units(
             id BIGSERIAL PRIMARY KEY, product_id BIGINT NOT NULL REFERENCES inventory_products(id),
@@ -1334,18 +1345,26 @@ def costs_report(request: Request, month: str = Query(..., pattern=r"^\d{4}-\d{2
         trend_rows=c.execute("""SELECT date_trunc('month',sale_date)::date,COUNT(*),SUM(subtotal-discount),SUM(cost_total)
             FROM sales WHERE status='completed' AND sale_date>=%s AND sale_date<%s GROUP BY 1""",(first,end)).fetchall()
         tmap={r[0]:r for r in trend_rows}
+        emap={r[0]:r[1] for r in c.execute("""SELECT date_trunc('month',expense_date)::date,SUM(amount) FROM operating_expenses
+            WHERE status='active' AND expense_date>=%s AND expense_date<%s GROUP BY 1""",(first,end)).fetchall()}
         trend=[]
         for i in range(6):
             m=_shift_month(first,i); r=tmap.get(m)
             net=r[2] if r else Decimal(0); cost=r[3] if r else Decimal(0)
-            trend.append({"month":m.strftime('%Y-%m'),"sales":r[1] if r else 0,"net_revenue":net,"cost":cost,"margin":net-cost})
+            ex=emap.get(m,Decimal(0))
+            trend.append({"month":m.strftime('%Y-%m'),"sales":r[1] if r else 0,"net_revenue":net,"cost":cost,"margin":net-cost,
+                          "expenses":ex,"profit":net-cost-ex})
+        exp_cats,exp_total=_expenses_by_category(c,start,end)
 
     net=sales_agg[1]; cogs=sales_agg[4]
     return {"month":month,
         "sales":{"count":sales_agg[0],"net_revenue":net,"discounts":sales_agg[2],"shipping":sales_agg[3],"cost":cogs,
                  "margin":net-cogs,"margin_pct":(((net-cogs)/net)*100).quantize(Decimal('0.1')) if net else None,
                  "units":sum((p["units"] for p in products),Decimal(0))},
-        "products":products,"production":prod,"produced":produced,"overhead":overhead,"trend":trend}
+        "products":products,"production":prod,"produced":produced,"overhead":overhead,"trend":trend,
+        "expenses":{"total":exp_total,"by_category":exp_cats},
+        "profit":{"amount":net-cogs-exp_total,
+                  "pct":(((net-cogs-exp_total)/net)*100).quantize(Decimal('0.1')) if net else None}}
 
 
 
@@ -1492,3 +1511,81 @@ def retire_investment(inv_id: int, d: InvestmentRetire, request: Request):
                   (d.retired_date,d.reason.strip(),u['id'],inv_id))
         r=c.execute(f"SELECT {INV_COLUMNS} {INV_FROM} WHERE i.id=%s",(inv_id,)).fetchone()
     return {**_investment_dict(r,local_today()),"message":"Inversión dada de baja. Deja de sumar al gasto mensual desde ese mes."}
+
+
+# ----------------------------- GASTOS DEL NEGOCIO -----------------------------
+# Lo que cuesta vender y operar sin ser parte de fabricar: no entra al coste de las piezas,
+# se resta del margen del mes para ver la ganancia. Lo que se gasta fabricando va en Producción.
+EXPENSE_CATEGORIES={"packaging":"Empaque","shipping":"Envíos y transporte","marketing":"Publicidad",
+    "fees":"Comisiones y bancos","supplies":"Papelería e insumos","services":"Servicios e internet","other":"Otro"}
+
+class ExpenseInput(BaseModel):
+    expense_date: date
+    category: Literal["packaging","shipping","marketing","fees","supplies","services","other"]
+    description: str = Field(min_length=2, max_length=160)
+    amount: Decimal = Field(gt=0, le=999999999)
+    payment_method: Literal["cash","transfer"] = "cash"
+    note: str = Field(default="", max_length=1000)
+    client_ref: Optional[str] = Field(default=None, min_length=8, max_length=64, pattern=r"^[A-Za-z0-9-]+$")
+class ExpenseVoid(BaseModel):
+    reason: str = Field(min_length=3, max_length=500)
+
+EXP_COLUMNS="""e.id,e.expense_date,e.category,e.description,e.amount,e.payment_method,e.note,e.status,e.void_reason,
+    cu.username,e.created_at,vu.username,e.voided_at"""
+EXP_FROM="""FROM operating_expenses e LEFT JOIN app_users cu ON cu.id=e.created_by LEFT JOIN app_users vu ON vu.id=e.voided_by"""
+
+def _expense_dict(r):
+    return {"id":r[0],"expense_date":r[1].isoformat(),"category":r[2],"category_label":EXPENSE_CATEGORIES.get(r[2],r[2]),
+        "description":r[3],"amount":r[4],"payment_method":r[5],"note":r[6],"status":r[7],"void_reason":r[8],
+        "created_by":r[9],"created_at":r[10],"voided_by":r[11],"voided_at":r[12]}
+
+def _expenses_by_category(c, start: date, end: date):
+    rows=c.execute("""SELECT category,COUNT(*),SUM(amount) FROM operating_expenses
+        WHERE status='active' AND expense_date>=%s AND expense_date<%s GROUP BY category ORDER BY SUM(amount) DESC""",(start,end)).fetchall()
+    cats=[{"category":r[0],"label":EXPENSE_CATEGORIES.get(r[0],r[0]),"count":r[1],"amount":r[2]} for r in rows]
+    return cats,sum((x["amount"] for x in cats),Decimal(0))
+
+@app.get("/expenses")
+def list_expenses(request: Request, month: str = Query(..., pattern=r"^\d{4}-\d{2}$")):
+    user_from(request)
+    start,end=_month_range(month)
+    with psycopg.connect(DB) as c:
+        rows=c.execute(f"""SELECT {EXP_COLUMNS} {EXP_FROM} WHERE e.expense_date>=%s AND e.expense_date<%s
+            ORDER BY e.expense_date DESC, e.id DESC""",(start,end)).fetchall()
+        cats,total=_expenses_by_category(c,start,end)
+        prev_start=_shift_month(start,-1)
+        _,prev_total=_expenses_by_category(c,prev_start,start)
+    return {"month":month,"items":[_expense_dict(r) for r in rows],"categories":EXPENSE_CATEGORIES,
+            "summary":{"total":total,"count":sum(x["count"] for x in cats),"by_category":cats,"previous_month_total":prev_total}}
+
+@app.post("/expenses", status_code=201)
+def create_expense(d: ExpenseInput, request: Request):
+    """Cualquier cuenta del equipo registra gastos; solo un administrador los anula."""
+    u=user_from(request)
+    if d.expense_date>local_today(): raise HTTPException(422,"La fecha del gasto no puede estar en el futuro")
+    with psycopg.connect(DB) as c:
+        if d.client_ref:
+            prev=c.execute("SELECT id FROM operating_expenses WHERE client_ref=%s",(d.client_ref,)).fetchone()
+            if prev:
+                r=c.execute(f"SELECT {EXP_COLUMNS} {EXP_FROM} WHERE e.id=%s",(prev[0],)).fetchone()
+                return {**_expense_dict(r),"duplicate":True}
+        eid=c.execute("""INSERT INTO operating_expenses(expense_date,category,description,amount,payment_method,note,client_ref,created_by)
+            VALUES(%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (client_ref) DO NOTHING RETURNING id""",
+            (d.expense_date,d.category,d.description.strip(),d.amount,d.payment_method,d.note.strip(),d.client_ref,u['id'])).fetchone()
+        if not eid:
+            eid=c.execute("SELECT id FROM operating_expenses WHERE client_ref=%s",(d.client_ref,)).fetchone()
+        r=c.execute(f"SELECT {EXP_COLUMNS} {EXP_FROM} WHERE e.id=%s",(eid[0],)).fetchone()
+    return _expense_dict(r)
+
+@app.post("/expenses/{exp_id}/void")
+def void_expense(exp_id: int, d: ExpenseVoid, request: Request):
+    """Anula un gasto registrado por error. Se conserva con el motivo y deja de contar."""
+    u=require_admin(request)
+    with psycopg.connect(DB) as c:
+        cur=c.execute("SELECT status FROM operating_expenses WHERE id=%s FOR UPDATE",(exp_id,)).fetchone()
+        if not cur: raise HTTPException(404,"Gasto no encontrado")
+        if cur[0]=="voided": raise HTTPException(409,"Este gasto ya está anulado")
+        c.execute("UPDATE operating_expenses SET status='voided',void_reason=%s,voided_by=%s,voided_at=NOW() WHERE id=%s",
+                  (d.reason.strip(),u['id'],exp_id))
+        r=c.execute(f"SELECT {EXP_COLUMNS} {EXP_FROM} WHERE e.id=%s",(exp_id,)).fetchone()
+    return {**_expense_dict(r),"message":"Gasto anulado. Ya no cuenta en Costes."}
