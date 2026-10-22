@@ -86,7 +86,14 @@
     .scale{position:relative;width:319px;max-width:100%;aspect-ratio:319/396;margin:0 auto;background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:calc(100% * 55 / 319) calc(100% * 55 / 396);background-position:left bottom;border-left:1px solid #8a948f;border-bottom:1px solid #8a948f}
     .scale-box{position:absolute;left:0;bottom:0;border:1px solid #6f7d77;border-left:0;border-bottom:0;background:transparent;transition:background .2s,border-color .2s}
     .scale-box span{position:absolute;right:6px;top:4px;font-size:12px;font-weight:600;color:var(--muted)}
-    .scale-box.on{border:2px solid var(--forest);border-left:0;border-bottom:0;background:#F5D97Ecc;z-index:6}
+    .scale-box.on{border:2px solid var(--forest);border-left:0;border-bottom:0;background:#BBDCD3d9;z-index:6}
+    .scale-ref{position:absolute;left:0;bottom:0;border:2px dashed var(--ink);border-left-style:solid;border-bottom-style:solid;border-radius:0 6px 0 0;z-index:8;pointer-events:none;transition:width .25s,height .25s}
+    .scale-ref span{position:absolute;left:6px;top:-22px;font-size:11px;font-weight:600;color:var(--ink);white-space:nowrap;background:var(--paper-2);padding:1px 6px;border-radius:4px;border:1px solid var(--line)}
+    .scale-ref.over{border-color:var(--danger,#a35449)}
+    .refs{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+    .refs .lbl{font-size:13px;color:var(--muted);margin-right:2px}
+    .ref{min-height:40px;padding:0 14px;border-radius:999px;border:1px solid var(--forest);background:transparent;color:var(--forest);font:600 14px var(--sans);cursor:pointer}
+    .ref[aria-pressed="true"]{background:var(--forest);color:var(--white)}
     .scale-box.on span{color:var(--ink)}
     .scale-axis{display:flex;justify-content:space-between;width:319px;max-width:100%;margin:6px auto 0;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
     .detail{flex:1 1 420px;min-width:0;display:flex;flex-direction:column;gap:24px}
@@ -279,12 +286,13 @@
           <a class="btn" id="size-wa" href="#" target="_blank" rel="noopener noreferrer" style="align-self:flex-start">Consultar por WhatsApp</a>
           <form class="measure" id="measure" novalidate>
             <h3>¿Ya mediste tu libro?</h3>
+            <div class="refs" id="refs" role="group" aria-label="Comparar con un dispositivo"><span class="lbl">O compara con:</span></div>
             <div class="fields">
               <div class="field"><label for="libro-ancho">Ancho (cm)</label><input id="libro-ancho" type="number" inputmode="decimal" min="1" step="0.5" value="15"></div>
               <div class="field"><label for="libro-alto">Alto (cm)</label><input id="libro-alto" type="number" inputmode="decimal" min="1" step="0.5" value="23"></div>
             </div>
             <p class="verdict" id="verdict" aria-live="polite"></p>
-            <p class="small">Calculamos con un margen de 1,5 cm para que el libro entre y salga sin forzarlo. Si es muy grueso, envíanos sus medidas.</p>
+            <p class="small">Calculamos con un margen de 1,5 cm para que entre y salga sin forzarlo. Las medidas de los dispositivos son las del fabricante, sin estuche. Si es muy grueso, envíanos sus medidas.</p>
           </form>
         </div>
       </div>
@@ -390,8 +398,8 @@
       {code:'XS',w:16,h:23,price:70000,color:'Azul y crudo',image:'blue-cream.webp',alt:'Producto talla XS con cuerpo crudo y solapa azul',fits:['Libro de bolsillo','Lector electrónico','Agenda o libreta pequeña']},
       {code:'S',w:19,h:26,price:75000,color:'Salvia',image:'salvia-s-real.webp',alt:'Producto talla S verde salvia con solapa cruda',fits:['Libro en formato estándar','Cuaderno A5','Tablet de 8 pulgadas']},
       {code:'M',w:22,h:30,price:80000,color:'Ocre y petróleo',image:'m.webp',alt:'Producto talla M azul petróleo con solapa ocre',fits:['Libro de tapa dura','Cuaderno grande','Tablet de 10 a 11 pulgadas']},
-      {code:'L',w:24,h:32,price:85000,color:'Terracota y crudo',image:'l.webp',alt:'Producto talla L crudo con solapa terracota y botón',fits:['Libro ilustrado','Cuaderno tamaño carta','Tablet de 12 a 13 pulgadas']},
-      {code:'XL',w:29,h:36,price:90000,color:'Rosa y arena',image:'xl.webp',alt:'Producto talla XL rosa con solapa color arena',fits:['Libro de arte o de gran formato','Carpeta de dibujo pequeña','Portátil de 13 pulgadas']}
+      {code:'L',w:24,h:32,price:85000,color:'Terracota y crudo',image:'l.webp',alt:'Producto talla L crudo con solapa terracota y botón',fits:['Libro ilustrado','Cuaderno tamaño carta','Portátil de 13 pulgadas, justo']},
+      {code:'XL',w:29,h:36,price:90000,color:'Rosa y arena',image:'xl.webp',alt:'Producto talla XL rosa con solapa color arena',fits:['Libro de arte o de gran formato','Carpeta de dibujo pequeña','Portátil de 13 pulgadas, con holgura']}
     ];
     const MARGIN=1.5;
     const sizeMsg=s=>`Hola, vi en la página de Gatelier el producto talla ${s.code} (${s.w} × ${s.h} cm, ${money(s.price)}). ¿Me confirman qué combinaciones tienen disponibles?`;
@@ -411,16 +419,43 @@
     }
     pills.addEventListener('click',e=>{const b=e.target.closest('.pill');if(b)selectSize(b.dataset.code);});
 
-    // Mide tu libro
-    const inW=document.getElementById('libro-ancho'), inH=document.getElementById('libro-alto'), verdict=document.getElementById('verdict');
+    // Mide tu libro o compara con un dispositivo de referencia (medidas del fabricante, ancho × alto, sin estuche)
+    const REFS=[
+      {id:'mini',label:'iPad mini',name:'el iPad mini',w:13.48,h:19.54},
+      {id:'ipad',label:'iPad 11″',name:'el iPad de 11 pulgadas',w:17.95,h:24.86},
+      {id:'mac',label:'Portátil 13″',name:'un portátil de 13 pulgadas como el MacBook Air',w:21.5,h:30.41}
+    ];
+    const inW=document.getElementById('libro-ancho'), inH=document.getElementById('libro-alto'), verdict=document.getElementById('verdict'), refsBox=document.getElementById('refs');
+    refsBox.insertAdjacentHTML('beforeend',REFS.map(r=>`<button class="ref" type="button" data-ref="${r.id}" aria-pressed="false">${r.label}</button>`).join(''));
+    const outline=document.createElement('div');outline.className='scale-ref';outline.setAttribute('aria-hidden','true');outline.innerHTML='<span></span>';scale.appendChild(outline);
+    const cm=v=>String(Math.round(v*10)/10).replace('.',',');
+    let activeRef=null;
+    function drawOutline(w,h,label){
+      if(!(w>0)||!(h>0)){outline.hidden=true;return}
+      outline.hidden=false;
+      outline.style.width=Math.min(100,w/29*100).toFixed(3)+'%';outline.style.height=Math.min(100,h/36*100).toFixed(3)+'%';
+      outline.classList.toggle('over',w>29||h>36);
+      outline.querySelector('span').textContent=label;
+    }
     function checkBook(){
       const w=parseFloat(String(inW.value).replace(',','.')), h=parseFloat(String(inH.value).replace(',','.'));
+      const ref=REFS.find(r=>r.id===activeRef);
+      refsBox.querySelectorAll('.ref').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.ref===activeRef)));
+      drawOutline(w,h,ref?ref.label:'Tu libro');
       if(!(w>0)||!(h>0)){verdict.textContent='Escribe el ancho y el alto de tu libro.';return;}
-      const match=SIZES.find(s=>w+MARGIN<=s.w&&h+MARGIN<=s.h);
-      if(match){verdict.textContent=`Te recomendamos la talla ${match.code} (${match.w} × ${match.h} cm).`;selectSize(match.code);}
-      else verdict.textContent='Tu libro es más grande que la talla XL. Escríbenos y buscamos una solución.';
+      const who=ref?ref.name.charAt(0).toUpperCase()+ref.name.slice(1)+` (${cm(w)} × ${cm(h)} cm)`:'Tu libro';
+      const i=SIZES.findIndex(s=>w+MARGIN<=s.w&&h+MARGIN<=s.h);
+      if(i<0){verdict.textContent=`${who} es más grande que la talla XL. Escríbenos y buscamos una solución.`;return;}
+      const match=SIZES[i],next=SIZES[i+1];
+      const tight=Math.min(match.w-(w+MARGIN),match.h-(h+MARGIN))<1;
+      verdict.textContent=ref?`Para ${ref.name} te recomendamos la talla ${match.code} (${match.w} × ${match.h} cm).`:`Te recomendamos la talla ${match.code} (${match.w} × ${match.h} cm).`;
+      if(tight&&next)verdict.textContent+=` Queda justa; si prefieres que entre con holgura, la ${next.code} (${next.w} × ${next.h} cm).`;
+      selectSize(match.code);
     }
-    inW.addEventListener('input',checkBook);inH.addEventListener('input',checkBook);
+    refsBox.addEventListener('click',e=>{const b=e.target.closest('.ref');if(!b)return;const r=REFS.find(x=>x.id===b.dataset.ref);
+      if(activeRef===r.id){activeRef=null;inW.value=15;inH.value=23}else{activeRef=r.id;inW.value=cm(r.w).replace(',','.');inH.value=cm(r.h).replace(',','.')}
+      checkBook();});
+    inW.addEventListener('input',()=>{activeRef=null;checkBook()});inH.addEventListener('input',()=>{activeRef=null;checkBook()});
     document.getElementById('measure').addEventListener('submit',e=>{e.preventDefault();checkBook();});
 
     // Colección: cada talla despliega sus productos únicos disponibles
