@@ -225,7 +225,7 @@
       .fabric img,.atelier>img{width:100%;height:340px}
       .size-dims{font-size:36px}
     }
-  .scale-axis span{position:absolute;top:0;transform:translateX(-50%);white-space:nowrap}.scale-axis span:first-child{transform:none}</style>
+  .scale-axis span{position:absolute;top:0;transform:translateX(-50%);white-space:nowrap}.scale-axis span:first-child{transform:none}.scale-y{position:absolute;left:-6px;transform:translate(-100%,50%);font-size:11px;line-height:1;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;pointer-events:none}.scale-card{padding-left:34px}</style>
 </head>
 <body>
   <header class="topbar">
@@ -406,7 +406,7 @@
 
     // Guía de tallas
     const scale=document.getElementById('scale'), pills=document.getElementById('pills');
-    scale.innerHTML=SIZES.map((s,i)=>`<div class="scale-box" data-code="${s.code}" style="width:${(s.w/27*100).toFixed(3)}%;height:${(s.h/33*100).toFixed(3)}%;z-index:${5-i}"><span>${s.code}</span></div>`).join('');
+    scale.innerHTML=SIZES.map((s,i)=>`<div class="scale-box" data-code="${s.code}" style="width:${(s.w/27*100).toFixed(3)}%;height:${(s.h/33*100).toFixed(3)}%;z-index:${5-i}"><span>${s.code}</span></div>`).join('')+[5,10,15,20,25,30].map(v=>`<span class="scale-y" style="bottom:${(v/33*100).toFixed(3)}%">${v}</span>`).join('');
     pills.innerHTML=SIZES.map(s=>`<button class="pill" type="button" data-code="${s.code}" aria-pressed="false">${s.code}</button>`).join('');
     function selectSize(code){
       const s=SIZES.find(x=>x.code===code);if(!s)return;
