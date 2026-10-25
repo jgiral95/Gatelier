@@ -83,7 +83,7 @@
     /* Guía de tallas */
     .guide{display:flex;flex-wrap:wrap;gap:40px 56px;align-items:flex-start}
     .scale-card{flex:0 1 420px;min-width:0;background:var(--paper-2);border:1px solid var(--line);border-radius:6px;padding:28px 24px 20px}
-    .scale{position:relative;width:319px;max-width:100%;aspect-ratio:319/396;margin:0 auto;background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:calc(100% * 55 / 319) calc(100% * 55 / 396);background-position:left bottom;border-left:1px solid #8a948f;border-bottom:1px solid #8a948f}
+    .scale{position:relative;width:297px;max-width:100%;aspect-ratio:297/363;margin:0 auto;background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:calc(100% * 55 / 297) calc(100% * 55 / 363);background-position:left bottom;border-left:1px solid #8a948f;border-bottom:1px solid #8a948f}
     .scale-box{position:absolute;left:0;bottom:0;border:1px solid #6f7d77;border-left:0;border-bottom:0;background:transparent;transition:background .2s,border-color .2s}
     .scale-box span{position:absolute;right:6px;top:4px;font-size:12px;font-weight:600;color:var(--muted)}
     .scale-box.on{border:2px solid var(--forest);border-left:0;border-bottom:0;background:#BBDCD3d9;z-index:6}
@@ -95,7 +95,7 @@
     .ref{min-height:40px;padding:0 14px;border-radius:999px;border:1px solid var(--forest);background:transparent;color:var(--forest);font:600 14px var(--sans);cursor:pointer}
     .ref[aria-pressed="true"]{background:var(--forest);color:var(--white)}
     .scale-box.on span{color:var(--ink)}
-    .scale-axis{display:flex;justify-content:space-between;width:319px;max-width:100%;margin:6px auto 0;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+    .scale-axis{position:relative;height:16px;width:297px;max-width:100%;margin:6px auto 0;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
     .detail{flex:1 1 420px;min-width:0;display:flex;flex-direction:column;gap:24px}
     .pills{display:flex;flex-wrap:wrap;gap:10px}
     .pill{min-width:64px;min-height:48px;padding:0 18px;border-radius:999px;font:inherit;font-size:16px;font-weight:600;cursor:pointer;border:1px solid var(--forest);background:transparent;color:var(--forest)}
@@ -225,7 +225,7 @@
       .fabric img,.atelier>img{width:100%;height:340px}
       .size-dims{font-size:36px}
     }
-  </style>
+  .scale-axis span{position:absolute;top:0;transform:translateX(-50%);white-space:nowrap}.scale-axis span:first-child{transform:none}</style>
 </head>
 <body>
   <header class="topbar">
@@ -277,7 +277,7 @@
       <div class="guide">
         <div class="scale-card">
           <div class="scale" id="scale" role="img" aria-label="Comparación a escala de las cinco tallas de producto, de XS a XL"></div>
-          <div class="scale-axis" aria-hidden="true"><span>0</span><span>5</span><span>10</span><span>15</span><span>20</span><span>25 cm</span></div>
+          <div class="scale-axis" aria-hidden="true"><span style="left:0">0</span><span style="left:18.52%">5</span><span style="left:37.04%">10</span><span style="left:55.56%">15</span><span style="left:74.07%">20</span><span style="left:92.59%">25 cm</span></div>
         </div>
         <div class="detail">
           <div class="pills" id="pills" role="group" aria-label="Elige una talla"></div>
@@ -288,8 +288,8 @@
             <h3>¿Ya mediste tu libro?</h3>
             <div class="refs" id="refs" role="group" aria-label="Comparar con un dispositivo"><span class="lbl">O compara con:</span></div>
             <div class="fields">
-              <div class="field"><label for="libro-ancho">Ancho (cm)</label><input id="libro-ancho" type="number" inputmode="decimal" min="1" step="0.5" value="15"></div>
-              <div class="field"><label for="libro-alto">Alto (cm)</label><input id="libro-alto" type="number" inputmode="decimal" min="1" step="0.5" value="23"></div>
+              <div class="field"><label for="libro-ancho">Ancho (cm)</label><input id="libro-ancho" type="number" inputmode="decimal" min="1" step="0.5" value="13"></div>
+              <div class="field"><label for="libro-alto">Alto (cm)</label><input id="libro-alto" type="number" inputmode="decimal" min="1" step="0.5" value="20"></div>
             </div>
             <p class="verdict" id="verdict" aria-live="polite"></p>
             <p class="small">Calculamos con un margen de 1,5 cm para que entre y salga sin forzarlo. Las medidas de los dispositivos son las del fabricante, sin estuche. Si es muy grueso, envíanos sus medidas.</p>
@@ -395,18 +395,18 @@
 
     // Medidas confirmadas del producto (ancho × alto, cm). Precios y fotos de referencia de la galería.
     const SIZES=[
-      {code:'XS',w:16,h:23,price:70000,color:'Azul y crudo',image:'blue-cream.webp',alt:'Producto talla XS con cuerpo crudo y solapa azul',fits:['Libro de bolsillo','Lector electrónico','Agenda o libreta pequeña']},
-      {code:'S',w:19,h:26,price:75000,color:'Salvia',image:'salvia-s-real.webp',alt:'Producto talla S verde salvia con solapa cruda',fits:['Libro en formato estándar','Cuaderno A5','Tablet de 8 pulgadas']},
-      {code:'M',w:22,h:30,price:80000,color:'Ocre y petróleo',image:'m.webp',alt:'Producto talla M azul petróleo con solapa ocre',fits:['Libro de tapa dura','Cuaderno grande','Tablet de 10 a 11 pulgadas']},
-      {code:'L',w:24,h:32,price:85000,color:'Terracota y crudo',image:'l.webp',alt:'Producto talla L crudo con solapa terracota y botón',fits:['Libro ilustrado','Cuaderno tamaño carta','Portátil de 13 pulgadas, justo']},
-      {code:'XL',w:29,h:36,price:90000,color:'Rosa y arena',image:'xl.webp',alt:'Producto talla XL rosa con solapa color arena',fits:['Libro de arte o de gran formato','Carpeta de dibujo pequeña','Portátil de 13 pulgadas, con holgura']}
+      {code:'XS',w:14,h:21,price:70000,color:'Azul y crudo',image:'blue-cream.webp',alt:'Producto talla XS con cuerpo crudo y solapa azul',fits:['Libro de bolsillo','Lector electrónico de 6 pulgadas','Agenda o libreta pequeña']},
+      {code:'S',w:17,h:24,price:75000,color:'Salvia',image:'salvia-s-real.webp',alt:'Producto talla S verde salvia con solapa cruda',fits:['Libro en formato estándar','iPad mini','Cuaderno A5']},
+      {code:'M',w:20,h:29,price:80000,color:'Ocre y petróleo',image:'m.webp',alt:'Producto talla M azul petróleo con solapa ocre',fits:['Libro de tapa dura','iPad de 11 pulgadas','Cuaderno B5']},
+      {code:'L',w:22,h:30,price:85000,color:'Terracota y crudo',image:'l.webp',alt:'Producto talla L crudo con solapa terracota y botón',fits:['Libro ilustrado','Libreta o planeador grande','iPad de 11 pulgadas con estuche']},
+      {code:'XL',w:27,h:33,price:90000,color:'Rosa y arena',image:'xl.webp',alt:'Producto talla XL rosa con solapa color arena',fits:['Libro de arte o de gran formato','Portátil de 13 pulgadas','Cuaderno carta o A4']}
     ];
     const MARGIN=1.5;
     const sizeMsg=s=>`Hola, vi en la página de Gatelier el producto talla ${s.code} (${s.w} × ${s.h} cm, ${money(s.price)}). ¿Me confirman qué combinaciones tienen disponibles?`;
 
     // Guía de tallas
     const scale=document.getElementById('scale'), pills=document.getElementById('pills');
-    scale.innerHTML=SIZES.map((s,i)=>`<div class="scale-box" data-code="${s.code}" style="width:${(s.w/29*100).toFixed(3)}%;height:${(s.h/36*100).toFixed(3)}%;z-index:${5-i}"><span>${s.code}</span></div>`).join('');
+    scale.innerHTML=SIZES.map((s,i)=>`<div class="scale-box" data-code="${s.code}" style="width:${(s.w/27*100).toFixed(3)}%;height:${(s.h/33*100).toFixed(3)}%;z-index:${5-i}"><span>${s.code}</span></div>`).join('');
     pills.innerHTML=SIZES.map(s=>`<button class="pill" type="button" data-code="${s.code}" aria-pressed="false">${s.code}</button>`).join('');
     function selectSize(code){
       const s=SIZES.find(x=>x.code===code);if(!s)return;
@@ -433,8 +433,8 @@
     function drawOutline(w,h,label){
       if(!(w>0)||!(h>0)){outline.hidden=true;return}
       outline.hidden=false;
-      outline.style.width=Math.min(100,w/29*100).toFixed(3)+'%';outline.style.height=Math.min(100,h/36*100).toFixed(3)+'%';
-      outline.classList.toggle('over',w>29||h>36);
+      outline.style.width=Math.min(100,w/27*100).toFixed(3)+'%';outline.style.height=Math.min(100,h/33*100).toFixed(3)+'%';
+      outline.classList.toggle('over',w>27||h>33);
       outline.querySelector('span').textContent=label;
     }
     function checkBook(){
@@ -446,14 +446,12 @@
       const who=ref?ref.name.charAt(0).toUpperCase()+ref.name.slice(1)+` (${cm(w)} × ${cm(h)} cm)`:'Tu libro';
       const i=SIZES.findIndex(s=>w+MARGIN<=s.w&&h+MARGIN<=s.h);
       if(i<0){verdict.textContent=`${who} es más grande que la talla XL. Escríbenos y buscamos una solución.`;return;}
-      const match=SIZES[i],next=SIZES[i+1];
-      const tight=Math.min(match.w-(w+MARGIN),match.h-(h+MARGIN))<1;
+      const match=SIZES[i];
       verdict.textContent=ref?`Para ${ref.name} te recomendamos la talla ${match.code} (${match.w} × ${match.h} cm).`:`Te recomendamos la talla ${match.code} (${match.w} × ${match.h} cm).`;
-      if(tight&&next)verdict.textContent+=` Queda justa; si prefieres que entre con holgura, la ${next.code} (${next.w} × ${next.h} cm).`;
       selectSize(match.code);
     }
     refsBox.addEventListener('click',e=>{const b=e.target.closest('.ref');if(!b)return;const r=REFS.find(x=>x.id===b.dataset.ref);
-      if(activeRef===r.id){activeRef=null;inW.value=15;inH.value=23}else{activeRef=r.id;inW.value=cm(r.w).replace(',','.');inH.value=cm(r.h).replace(',','.')}
+      if(activeRef===r.id){activeRef=null;inW.value=13;inH.value=20}else{activeRef=r.id;inW.value=cm(r.w).replace(',','.');inH.value=cm(r.h).replace(',','.')}
       checkBook();});
     inW.addEventListener('input',()=>{activeRef=null;checkBook()});inH.addEventListener('input',()=>{activeRef=null;checkBook()});
     document.getElementById('measure').addEventListener('submit',e=>{e.preventDefault();checkBook();});
