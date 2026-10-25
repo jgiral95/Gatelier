@@ -256,3 +256,6 @@ td .actions{flex-wrap:nowrap}
 
 /* En celular el encabezado del panel se apila: la base de 300px se volvía altura y dejaba un hueco */
 @media(max-width:850px){.panelhead>div:first-child{flex-basis:auto}}
+
+/* iPhone acerca la pantalla al tocar un campo con letra menor a 16px y se queda así: en pantallas táctiles los campos usan 16px */
+@media (max-width:850px),(pointer:coarse){input,select,textarea{font-size:16px!important}}
