@@ -225,3 +225,15 @@ def test_opciones_de_venta_muestran_reserva(user):
     user.post(f"/units/{uid}/reserve", json={"customer": "Camila", "hours": 10})
     opt = next(x for x in user.get("/sales/options").json()["products"] if x["id"] == p["id"])
     assert opt["units"][0]["reserved_for"] == "Camila" and opt["units"][0]["reserved_until"]
+
+
+def test_tamanos_de_fotos_y_foto_privada(admin, user):
+    p = ref(admin, "M", quantity=1)
+    uid = add_unit(admin, p["id"]).json()["units"][0]["id"]
+    up(admin, uid, "closed", img("JPEG"), "a.jpg", "image/jpeg")
+    assert user.get("/admin/unit-photos").status_code == 403
+    d = admin.get("/admin/unit-photos").json()
+    it = next(x for x in d["items"] if x["unit_id"] == uid)
+    assert it["bytes"] > 0 and d["total_bytes"] >= it["bytes"]
+    g = user.get(it["url"].removeprefix("/api"))
+    assert g.status_code == 200 and g.headers["content-type"] == "image/jpeg"

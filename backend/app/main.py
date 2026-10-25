@@ -604,6 +604,25 @@ async def upload_unit_photo(uid: int, kind: Literal["closed","open"], request: R
             (uid,kind,ctype,data,u['id']))
         return {**_units_payload(c,r[1]),"message":f"Foto «{PHOTO_KINDS[kind]}» de {r[2]} guardada"}
 
+@app.get("/admin/unit-photos")
+def unit_photo_sizes(request: Request):
+    """Tamaño de cada foto de unidad, para optimizarlas desde el panel."""
+    require_admin(request)
+    with psycopg.connect(DB) as c:
+        rows=c.execute("""SELECT up.unit_id,up.kind,octet_length(up.data),pu.code,floor(extract(epoch FROM up.updated_at))::bigint
+            FROM unit_photos up JOIN product_units pu ON pu.id=up.unit_id ORDER BY octet_length(up.data) DESC""").fetchall()
+    return {"items":[{"unit_id":r[0],"kind":r[1],"bytes":r[2],"code":r[3],"url":f"/api/units/{r[0]}/photos/{r[1]}?v={r[4]}"} for r in rows],
+            "total_bytes":sum(r[2] for r in rows)}
+
+@app.get("/units/{uid}/photos/{kind}")
+def private_unit_photo(uid: int, kind: Literal["closed","open"], request: Request):
+    """Foto de cualquier unidad (también vendidas o de referencias inactivas), solo con sesión."""
+    user_from(request)
+    with psycopg.connect(DB) as c:
+        r=c.execute("SELECT content_type,data FROM unit_photos WHERE unit_id=%s AND kind=%s",(uid,kind)).fetchone()
+    if not r: raise HTTPException(404,"Foto no encontrada")
+    return Response(content=bytes(r[1]),media_type=r[0],headers={"Cache-Control":"private, no-store"})
+
 @app.delete("/units/{uid}/photos/{kind}")
 def delete_unit_photo(uid: int, kind: Literal["closed","open"], request: Request):
     user_from(request)
