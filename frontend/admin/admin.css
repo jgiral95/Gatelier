@@ -253,3 +253,6 @@ td .actions{flex-wrap:nowrap}
 .rcpt-box h3{margin:0;font-size:13px}
 .rcpt-actions{display:flex;gap:8px;flex-wrap:wrap}
 .filepick input[type=file]{padding:9px;background:#fff}
+
+/* En celular el encabezado del panel se apila: la base de 300px se volvía altura y dejaba un hueco */
+@media(max-width:850px){.panelhead>div:first-child{flex-basis:auto}}
