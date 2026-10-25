@@ -395,11 +395,11 @@
 
     // Medidas confirmadas del producto (ancho × alto, cm). Precios y fotos de referencia de la galería.
     const SIZES=[
-      {code:'XS',w:14,h:21,price:70000,color:'Azul y crudo',image:'blue-cream.webp',alt:'Producto talla XS con cuerpo crudo y solapa azul',fits:['Libro de bolsillo','Lector electrónico de 6 pulgadas','Agenda o libreta pequeña']},
-      {code:'S',w:17,h:24,price:75000,color:'Salvia',image:'salvia-s-real.webp',alt:'Producto talla S verde salvia con solapa cruda',fits:['Libro en formato estándar','iPad mini','Cuaderno A5']},
-      {code:'M',w:20,h:29,price:80000,color:'Ocre y petróleo',image:'m.webp',alt:'Producto talla M azul petróleo con solapa ocre',fits:['Libro de tapa dura','iPad de 11 pulgadas','Cuaderno B5']},
-      {code:'L',w:22,h:30,price:85000,color:'Terracota y crudo',image:'l.webp',alt:'Producto talla L crudo con solapa terracota y botón',fits:['Libro ilustrado','Libreta o planeador grande','iPad de 11 pulgadas con estuche']},
-      {code:'XL',w:27,h:33,price:90000,color:'Rosa y arena',image:'xl.webp',alt:'Producto talla XL rosa con solapa color arena',fits:['Libro de arte o de gran formato','Portátil de 13 pulgadas','Cuaderno carta o A4']}
+      {code:'XS',w:14,h:21,price:70000,color:'Azul con solapa cruda',image:'talla-xs.webp',alt:'Funda talla XS azul con solapa cruda y presillas de cuadros',fits:['Libro de bolsillo','Lector electrónico de 6 pulgadas','Agenda o libreta pequeña']},
+      {code:'S',w:17,h:24,price:75000,color:'Verde salvia y espiga',image:'talla-s.webp',alt:'Funda talla S verde salvia con solapa crema en espiga',fits:['Libro en formato estándar','iPad mini','Cuaderno A5']},
+      {code:'M',w:20,h:29,price:80000,color:'Azul grisáceo y rosa',image:'talla-m.webp',alt:'Funda talla M azul grisáceo con solapa rosa',fits:['Libro de tapa dura','iPad de 11 pulgadas','Cuaderno B5']},
+      {code:'L',w:22,h:30,price:85000,color:'Gris y lino',image:'talla-l.webp',alt:'Funda talla L gris con solapa color lino',fits:['Libro ilustrado','Libreta o planeador grande','iPad de 11 pulgadas con estuche']},
+      {code:'XL',w:27,h:33,price:90000,color:'Petróleo y gris',image:'talla-xl.webp',alt:'Funda talla XL petróleo con solapa gris',fits:['Libro de arte o de gran formato','Portátil de 13 pulgadas','Cuaderno carta o A4']}
     ];
     const MARGIN=1.5;
     const sizeMsg=s=>`Hola, vi en la página de Gatelier el producto talla ${s.code} (${s.w} × ${s.h} cm, ${money(s.price)}). ¿Me confirman qué combinaciones tienen disponibles?`;
