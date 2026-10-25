@@ -224,3 +224,21 @@ def test_catalogo_publico_no_expone_costes(admin):
     make_product(admin, "finished_product", quantity=2, unit_cost=50000, sale_price=80000)
     items = admin.get("/public/catalog").json()["items"]
     assert items and all(set(i) == {"id", "ref", "name", "unit", "sale_price", "available", "size", "styles"} for i in items)
+
+
+def test_valor_de_productos_terminados(admin):
+    from decimal import Decimal
+    from conftest import unique
+    before = admin.get("/inventory").json()["summary"]["finished"]
+    admin.post("/inventory", json={"sku": unique("T"), "name": "Funda", "item_type": "finished_product", "unit": "unidad",
+                                   "quantity": 3, "unit_cost": 30000, "sale_price": 80000})
+    admin.post("/inventory", json={"sku": unique("T"), "name": "Funda sin precio", "item_type": "finished_product", "unit": "unidad",
+                                   "quantity": 2, "unit_cost": 25000})
+    admin.post("/inventory", json={"sku": unique("M"), "name": "Tela", "item_type": "raw_material", "unit": "metro",
+                                   "quantity": 5, "unit_cost": 10000})
+    f = admin.get("/inventory").json()["summary"]["finished"]
+    D = lambda v: Decimal(str(v))
+    assert D(f["units"]) - D(before["units"]) == 5
+    assert D(f["cost_value"]) - D(before["cost_value"]) == 140000
+    assert D(f["sale_value"]) - D(before["sale_value"]) == 240000
+    assert D(f["units_without_price"]) - D(before["units_without_price"]) == 2

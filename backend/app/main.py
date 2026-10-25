@@ -759,11 +759,17 @@ def inventory(request:Request,search:str=Query("",max_length=120),status:str=Que
         (search.strip(),term,term,term,status,status,status,item_type,item_type)).fetchall()
         totals=c.execute("""SELECT COUNT(*),COUNT(*) FILTER(WHERE quantity<=min_stock),COALESCE(SUM(quantity*unit_cost),0)
         FROM inventory_products WHERE is_active""").fetchone()
+        # Productos terminados en existencias (aún no vendidos): a coste y a precio de venta.
+        fin=c.execute("""SELECT COALESCE(SUM(quantity),0),COALESCE(SUM(quantity*unit_cost),0),
+            COALESCE(SUM(quantity*sale_price) FILTER(WHERE sale_price IS NOT NULL),0),
+            COALESCE(SUM(quantity) FILTER(WHERE sale_price IS NULL AND quantity>0),0)
+            FROM inventory_products WHERE is_active AND item_type='finished_product'""").fetchone()
         # Artículos con existencias pero sin coste: no suman al valor del inventario.
         uncosted=c.execute("""SELECT name FROM inventory_products WHERE is_active AND quantity>0 AND unit_cost=0
             ORDER BY item_type='finished_product' DESC, name""").fetchall()
     return {"items":[pack(r) for r in rows],"summary":{"products":totals[0],"low_stock":totals[1],"inventory_value":totals[2],
-            "uncosted":{"count":len(uncosted),"names":[r[0] for r in uncosted[:4]]}}}
+            "uncosted":{"count":len(uncosted),"names":[r[0] for r in uncosted[:4]]},
+            "finished":{"units":fin[0],"cost_value":fin[1],"sale_value":fin[2],"units_without_price":fin[3]}}}
 @app.post("/inventory",status_code=201)
 def create_product(d:Product,request:Request):
     u=user_from(request);sku=d.sku.strip();name=d.name.strip()
