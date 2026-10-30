@@ -282,7 +282,7 @@
           <div class="pills" id="pills" role="group" aria-label="Elige una talla"></div>
           <div class="size-line"><span class="size-dims" id="size-dims"></span><span class="size-price" id="size-price"></span></div>
           <div class="fits"><h3>Ideal para</h3><ul id="size-fits"></ul></div>
-          <a class="btn" id="size-wa" href="#" target="_blank" rel="noopener noreferrer" style="align-self:flex-start">Consultar por WhatsApp</a>
+          <a class="btn" id="size-wa" href="#coleccion" style="align-self:flex-start">Ver diseños disponibles</a>
           <form class="measure" id="measure" novalidate>
             <h3>¿Ya mediste tu libro?</h3>
             <div class="refs" id="refs" role="group" aria-label="Comparar con un dispositivo"><span class="lbl">O compara con:</span></div>
@@ -414,7 +414,7 @@
       document.getElementById('size-dims').textContent=`${s.w} × ${s.h} cm`;
       document.getElementById('size-price').textContent=money(s.price);
       document.getElementById('size-fits').innerHTML=s.fits.map(f=>`<li>${esc(f)}</li>`).join('');
-      const btn=document.getElementById('size-wa');btn.textContent=`Consultar la talla ${s.code} por WhatsApp`;setWa(btn,sizeMsg(s));
+      const btn=document.getElementById('size-wa');btn.textContent=`Ver diseños disponibles en talla ${s.code}`;btn.dataset.size=s.code;
     }
     pills.addEventListener('click',e=>{const b=e.target.closest('.pill');if(b)selectSize(b.dataset.code);});
 
@@ -485,6 +485,11 @@
       const b=e.target.closest('.card-toggle');if(!b)return;
       openSize=openSize===b.dataset.size?null:b.dataset.size;renderCards();renderStyles();
       if(openSize){const box=document.getElementById('styles');box.focus({preventScroll:true});box.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'})}
+    });
+    // Desde la guía de tallas: abrir los diseños de la talla elegida en la colección
+    document.getElementById('size-wa').addEventListener('click',e=>{
+      e.preventDefault();openSize=e.currentTarget.dataset.size;renderCards();renderStyles();
+      const box=document.getElementById('styles');box.focus({preventScroll:true});box.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'});
     });
     document.getElementById('styles').addEventListener('click',e=>{
       const v=e.target.closest('[data-view]');
